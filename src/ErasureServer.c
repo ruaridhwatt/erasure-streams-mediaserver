@@ -17,9 +17,10 @@
 #include <signal.h>
 #include <libwebsockets.h>
 
-#define PAYLOAD 10*1024*1024
+#define PAYLOAD 1024*1024
 #define OK "OK"
 #define SWITCH_SERVER "switch-server"
+#define START_STREAM "start-stream"
 
 static volatile int force_exit = 0;
 static struct libwebsocket_context *context;
@@ -27,6 +28,19 @@ static struct libwebsocket_context *context;
 struct upload_user {
    bool grantedUpload;
    bool terminatorReceived;
+};
+
+struct per_session_data {
+	long total_packets;
+	long package_to_send;
+	int readFile;
+	long filesize;
+	int sendsize;
+	unsigned char *buff;
+	char *filename;
+	int shouldSendFile;
+	int endPacketsSent;
+	int isSendingFile;
 };
 
 /*
@@ -74,64 +88,72 @@ int send_message(void *message, int length, int write_mode, struct libwebsocket 
    return EXIT_FAILURE;
 }
 
-/*
- * Slices up a file into pieces of size determined by PAYLOAD. Sends each piece to a given wsi with function send_message. Must be called by a writeable_callback
- *  as defined by libwebsockets.readme.
- *
- */
-void readFileBytes(struct libwebsocket *wsi, char *filename) {
-   FILE *fileptr;
-   unsigned char *buffer;
-   long filelen;
+void readFileBytes(struct per_session_data *psd) {
+	FILE *fileptr = fopen(psd->filename, "rb");
+	fseek(fileptr, 0, SEEK_END);
+	long filelen = ftell(fileptr);
+	rewind(fileptr);
 
-   fileptr = fopen(filename, "rb");
-   fseek(fileptr, 0, SEEK_END);
-   filelen = ftell(fileptr);
-   rewind(fileptr);
+	unsigned char *buffer = (unsigned char *)malloc((filelen)*sizeof(unsigned char));
+	fread(buffer, 1, filelen, fileptr);
+	fclose(fileptr);
 
-   buffer = (unsigned char *) malloc((filelen + 1) * sizeof(unsigned char));
-   fread(buffer, 1, filelen, fileptr);
+	psd->buff = buffer;
+	psd->filesize = filelen;
+}
 
-   unsigned char *buf = (unsigned char *) malloc((PAYLOAD - 4) * sizeof(unsigned char));
+void getTotalFragments(struct per_session_data *psd) {
+	long slicenr = 0;
+	long remain = psd->filesize;
+	while (remain) {
+		long toCpy = remain > PAYLOAD-5 ? PAYLOAD-5 : remain;
+		remain -= toCpy;
+		slicenr++;
+	}
+	psd->total_packets = slicenr;
+}
 
-   if (filelen < PAYLOAD - 5) {
-      send_message(buf, filelen, LWS_WRITE_BINARY, wsi);
-   } else {
+unsigned char *getFragment(struct per_session_data *psd) {
 
-      int remain = filelen;
-      int flag = LWS_WRITE_BINARY | LWS_WRITE_NO_FIN;
-      while (remain) {
-         long toCpy = remain > PAYLOAD - 5 ? PAYLOAD - 5 : remain;
-         memcpy(buf, buffer, toCpy);
-         buffer += toCpy;
-         remain -= toCpy;
+	unsigned char *buf = (unsigned char *)malloc((PAYLOAD - 4)*sizeof(unsigned char));
 
-         send_message(buf, toCpy, flag, wsi);
-         if (remain < 1) {
-            flag = LWS_WRITE_CONTINUATION;
-         } else {
-            flag = LWS_WRITE_CONTINUATION | LWS_WRITE_NO_FIN;
-         }
-      }
-   }
-   fclose(fileptr);
+	long slicenr = 0;
+	long remain =psd->filesize;
+	unsigned char* buffer = psd->buff;
+	while (remain)
+	{
+		long toCpy = remain > PAYLOAD-5 ? PAYLOAD-5 : remain;
+		memcpy(buf, buffer, toCpy);
+		buffer += toCpy;
+		remain -= toCpy;
+		if(slicenr == psd->package_to_send) {
+			psd->sendsize = toCpy;
+			break;
+		}
+		slicenr++;
+	}
+	return buf;
+}
+
+bool startsWith(const char *pre, const char *str) {
+	return strncmp(pre, str, strlen(pre)) == 0;
 }
 
 static int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
-      enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
+		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
 
-   struct upload_user * thisUser = (struct upload_user *) user;
+	struct upload_user * thisUser = (struct upload_user *) user;
 
-   switch (reason) {
+	switch (reason) {
 
-   case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: //Unable to shake hands
-      printf("Handshake failed\n");
-      break;
+	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: //Unable to shake hands
+		printf("Handshake failed\n");
+		break;
 
-   case LWS_CALLBACK_ESTABLISHED: //Handshake complete, create user.
-      printf("Connection established\n");
-      thisUser->grantedUpload = false;
-      thisUser->terminatorReceived = false;
+	case LWS_CALLBACK_ESTABLISHED: //Handshake complete, create user.
+		printf("Connection established\n");
+		thisUser->grantedUpload = false;
+		thisUser->terminatorReceived = false;
       break;
 
    case LWS_CALLBACK_RECEIVE: //stores the received file as "movie.mp4" in src folder.
@@ -153,38 +175,71 @@ static int callback_upload(struct libwebsocket_context * ctx, struct libwebsocke
    return 0;
 }
 
-static int callback_DL_slice(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
-      enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
+static int callback_stream(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason,
+		void *user, void *in, size_t len) {
 
-   switch (reason) {
+	struct per_session_data *psd = user;
 
-   case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
-      break;
-   case LWS_CALLBACK_ESTABLISHED:
-      printf("Client connection established\n");
-      break;
-   case LWS_CALLBACK_RECEIVE:
-      printf("message received, sending movie.mp4\n");
-      libwebsocket_callback_on_writable(ctx, wsi);
-      break;
-   case LWS_CALLBACK_CLOSED:
-      break;
-   case LWS_CALLBACK_HTTP:
-      break;
-   case LWS_CALLBACK_SERVER_WRITEABLE:
-      //For now, hardcode the videon you want to send below.
-      readFileBytes(wsi, "movie.mp4");
-      printf("Sending video data from file\n");
-      break;
-   default:
-      break;
-   }
-   return 0;
+	switch (reason) {
+
+	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		break;
+	case LWS_CALLBACK_ESTABLISHED:
+		printf("Client connection established\n");
+		break;
+	case LWS_CALLBACK_RECEIVE:
+		if (!lws_frame_is_binary(wsi)) {
+			char *inString = (char*)in;
+
+			if(startsWith(START_STREAM, inString)) {
+				inString += strlen(START_STREAM) + 1;
+				printf("request received, streaming %s\n", inString);
+				psd->readFile = 1;
+				psd->filename = inString;
+				psd->isSendingFile = 1;
+				libwebsocket_callback_on_writable(ctx, wsi);
+			}
+		}
+		break;
+	case LWS_CALLBACK_CLOSED:
+		printf("Connection Closed");
+		break;
+	case LWS_CALLBACK_SERVER_WRITEABLE:
+
+		if(psd->isSendingFile) {
+			if(psd->readFile) {
+				psd->readFile = 0;
+				readFileBytes(psd);
+				getTotalFragments(psd);
+				psd->package_to_send = 0;
+				psd->endPacketsSent = 0;
+			}
+
+			if(psd->package_to_send < psd->total_packets){
+				unsigned char* buf = getFragment(psd);
+				send_message(buf, psd->sendsize, LWS_WRITE_BINARY, wsi);
+				psd->package_to_send = psd->package_to_send + 1;
+				libwebsocket_callback_on_writable(ctx, wsi);
+			} else if (psd->endPacketsSent < 2) {
+				char *buff = "0";
+				unsigned char *buf = (unsigned char*)buff;
+				send_message(buf, 1, LWS_WRITE_BINARY, wsi);
+				psd->endPacketsSent = psd->endPacketsSent + 1;
+				libwebsocket_callback_on_writable(ctx, wsi);
+			} else {
+				psd->isSendingFile = 0;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
 }
 
 static struct libwebsocket_protocols protocols[] = {
       { "upload", callback_upload, sizeof(struct upload_user), PAYLOAD, 0 },
-      { "DL_Slice", callback_DL_slice, 0, PAYLOAD }, { NULL, NULL, 0 } };
+	  {"stream", callback_stream, sizeof(struct per_session_data) , PAYLOAD}, { NULL, NULL, 0 } };
 
 void sighandler(int sig) {
    force_exit = 1;
