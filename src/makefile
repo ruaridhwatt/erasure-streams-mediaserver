@@ -1,11 +1,9 @@
-OUT=erasure_server
-COMPILER=gcc
-FLAGS=-Wall
-LIBS=-lwebsockets
+CC=gcc
+CFLAGS=-g -Wall -lpthread -lwebsockets
 
-BIN_DIR=../bin
+all: Server
 
-all: $(OUT)
-
-$(OUT): ErasureServer.c
-	$(COMPILER) $(FLAGS) $(LIBS) ErasureServer.c -o $(BIN_DIR)/$(OUT)
+Server: erasure_Server.c llist.c llist.h hashmap.c hashmap.h hashmapSettings.c hashmapSettings.h string_functions.c string_functions.h
+	$(CC) $(CFLAGS) erasure_Server.c llist.c hashmap.c hashmapSettings.c string_functions.c -o Server
+clean:
+	rm Server
