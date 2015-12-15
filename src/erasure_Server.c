@@ -24,7 +24,7 @@
 #include "hashmapSettings.h"
 #include "string_functions.h"
 
-#define PAYLOAD 1024*1024
+#define PAYLOAD 10*1024
 #define UPLOAD 1024*1024
 
 #define OK "OK"
