@@ -27,13 +27,13 @@ then
    rmfile="rm "$fragname
    $rmfile 
 
-   crs_audstring=$CRS_HOME"crs_erasure_codes -e -k"$2" -m"$3" adata aenc"
+   crs_audstring=$CRS_HOME"bin/crs_erasure_codes -e -k"$2" -m"$3" adata aenc"
    $crs_audstring
 
    rmdata="rm adata"
    $rmdata
 
-   crs_vidstring=$CRS_HOME"crs_erasure_codes -e -k"$2" -m"$3" vdata venc"
+   crs_vidstring=$CRS_HOME"bin/crs_erasure_codes -e -k"$2" -m"$3" vdata venc"
    $crs_vidstring
 
    rmdata="rm vdata"
