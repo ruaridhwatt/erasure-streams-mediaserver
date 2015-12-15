@@ -44,7 +44,7 @@
 #define LIST_STREAMS "lst"
 
 #define CMD_SIZE 3
-#define BENTOSCRIPT "./BentoHandleScript.sh "
+#define BENTOSCRIPT "scripts/BentoHandleScript.sh "
 #define FILEHANDLESCRIPT "./FileHandleScript.sh "
 
 int received = 0;
