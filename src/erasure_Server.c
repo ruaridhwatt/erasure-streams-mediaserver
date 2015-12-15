@@ -345,7 +345,6 @@ void stream_audio_video(char* in, struct per_session_data *psd, struct libwebsoc
 			libwebsocket_callback_on_writable(ctx, wsi);
 		}
 	} else if(startsWith(GET, fileName)) {
-		libwebsocket_rx_flow_control (wsi, 1);
 		fileName += strlen(GET) + 1;
 		strtok(fileName, TAB);
 		char *sliceNr =  strtok(NULL, TAB);
@@ -382,6 +381,7 @@ static int callback_video(struct libwebsocket_context *ctx, struct libwebsocket 
 	switch (reason) {
 
 	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		libwebsocket_rx_flow_control (wsi, 1);
 		break;
 	case LWS_CALLBACK_ESTABLISHED:
 		printf("Client video connection established\n");
@@ -428,6 +428,7 @@ static int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket 
 	switch (reason) {
 
 	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		libwebsocket_rx_flow_control (wsi, 1);
 		break;
 	case LWS_CALLBACK_ESTABLISHED:
 		printf("Client audio connection established\n");
