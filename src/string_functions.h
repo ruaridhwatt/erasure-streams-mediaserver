@@ -18,13 +18,11 @@ void removeSubstring(char *s,const char *toremove);
 
 char *stringAppender(char *s1, char *s2);
 
-char *catVideoStringFactory(char *fileName);
-
-char *catAudioStringFactory(char *fileName);
-
 char *setVideoDirectory(char*fileName);
 
 char *setAudioDirectory(char*fileName);
+
+char *noMp4(char *fileName);
 
 char *setMPDDirectory(char*fileName);
 

@@ -27,55 +27,12 @@ char *stringAppender(char *s1, char *s2) {
 	return s3;
 }
 
-char *catVideoStringFactory(char *fileName) {
-	char *vidCat1 = "cat ";
-	char *vidCat2 = "/video/1/*.m4f >> ";
-	char *vidCat3 = "/video/segs.m4f";
-
-	char *shortendFileN = malloc((sizeof(char) * strlen(fileName)) + 1);
-	strcpy(shortendFileN,fileName);
-	removeSubstring(shortendFileN, ".mp4");
-	char *nameDir = stringAppender(shortendFileN, "dir");
-	char *appendString1 = stringAppender(vidCat1, nameDir);
-	char *appendString2 = stringAppender(appendString1, vidCat2);
-	char *appendString3 = stringAppender(appendString2, nameDir);
-	char *appendString4 = stringAppender(appendString3, vidCat3);
-
-	free(nameDir);
-	free(appendString1);
-	free(appendString2);
-	free(appendString3);
-	free(shortendFileN);
-	return appendString4;
-}
-
-char *catAudioStringFactory(char *fileName) {
-	char *audCat1 = "cat ";
-	char *audCat2 = "/audio/und/*.m4f >> ";
-	char *audCat3 = "/audio/segs.m4f";
-
-	char *shortendFileN = malloc((sizeof(char) * strlen(fileName)) + 1);
-	strcpy(shortendFileN,fileName);
-	removeSubstring(shortendFileN, ".mp4");
-	char *nameDir = stringAppender(shortendFileN, "dir");
-	char *appendString1 = stringAppender(audCat1, nameDir);
-	char *appendString2 = stringAppender(appendString1, audCat2);
-	char *appendString3 = stringAppender(appendString2, nameDir);
-	char *appendString4 = stringAppender(appendString3, audCat3);
-
-	free(nameDir);
-	free(appendString1);
-	free(appendString2);
-	free(appendString3);
-	free(shortendFileN);
-	return appendString4;
-}
-
 char *setVideoDirectory(char*fileName) {
 	char *shortendFileN = malloc(sizeof(char) * (strlen(fileName) + 1));
 	strcpy(shortendFileN,fileName);
 	removeSubstring(shortendFileN, ".mp4");
-	char *directory = "dir/video/1/";
+
+	char *directory = "/venc/";
 	char *filedir = stringAppender(shortendFileN, directory);
 	free(shortendFileN);
 	return filedir;
@@ -85,10 +42,18 @@ char *setAudioDirectory(char*fileName) {
 	char *shortendFileN = malloc(sizeof(char) * (strlen(fileName) + 1));
 	strcpy(shortendFileN,fileName);
 	removeSubstring(shortendFileN, ".mp4");
-	char *directory = "dir/audio/und/";
+
+	char *directory = "/aenc/";
 	char *filedir = stringAppender(shortendFileN, directory);
 	free(shortendFileN);
 	return filedir;
+}
+
+char *noMp4(char *fileName) {
+	char *shortendFileN = malloc(sizeof(char) * (strlen(fileName) + 1));
+	strcpy(shortendFileN,fileName);
+	removeSubstring(shortendFileN, ".mp4");
+	return shortendFileN;
 }
 
 char *setMPDDirectory(char*fileName) {

@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <libwebsockets.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "llist.h"
 #include "hashmap.h"
 #include "hashmapSettings.h"
@@ -25,7 +26,6 @@
 
 #define PAYLOAD 35000
 #define UPLOAD 1024*1024
-#define PORT 1337
 
 #define OK "OK"
 #define NOK "NOK"
@@ -48,6 +48,8 @@
 #define FILEHANDLESCRIPT "./FileHandleScript.sh "
 
 int received = 0;
+char *k;
+char *m;
 
 static volatile int force_exit = 0;
 static struct libwebsocket_context *context;
@@ -77,108 +79,63 @@ struct per_session_data {
 	long filesize;
 	int sendsize;
 	unsigned char *buff;
-	char *filename;
 	char *filedir;
 	int isSendingFile;
 	bool nok;
 };
 
 void receiveFile(void *in, size_t len, struct upload_user *user) {
-   if (len == 1 && *((unsigned char *) in) == 0) {
-      if (user->terminatorReceived == true) {
-         /* Second terminator received */
-         printf("Upload done!\n");
-         user->grantedUpload = false;
-         user->terminatorReceived = false;
-         user->uploadComplete = true;
-         /* TODO start distribution */
-      }
-      user->terminatorReceived = true;
-   } else {
-      printf("%d\n", (int)len);
-      FILE *received_file = fopen(user->filename, "a+b");
-      if (received_file == NULL) {
-         fprintf(stderr, "Failed to open file movie5.mp4\n");
-         exit(EXIT_FAILURE);
-      }
-      if (user->terminatorReceived == true) {
-         user->terminatorReceived = false;
-         /* Write terminator that wasn't! */
-         unsigned char pseudoTerm = 0;
-         fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
-      }
-      fwrite(in, sizeof(unsigned char), len, received_file);
-      fclose(received_file);
-   }
+	if (len == 1 && *((unsigned char *) in) == 0) {
+		if (user->terminatorReceived == true) {
+			/* Second terminator received */
+			printf("Upload done!\n");
+			user->grantedUpload = false;
+			user->terminatorReceived = false;
+			user->uploadComplete = true;
+			/* TODO start distribution */
+		}
+		user->terminatorReceived = true;
+	} else {
+		printf("%d\n", (int)len);
+		char *shortendFileN = noMp4(user->filename);
+		char *tempString1 = stringAppender(shortendFileN, "/");
+		char *filestr = stringAppender(tempString1, user->filename);
+
+		FILE *received_file = fopen(filestr, "a+b");
+		free(tempString1);
+		free(shortendFileN);
+		free(filestr);
+		if (received_file == NULL) {
+			fprintf(stderr, "Failed to open file %s\n", user->filename);
+			exit(EXIT_FAILURE);
+		}
+		if (user->terminatorReceived == true) {
+			user->terminatorReceived = false;
+			/* Write terminator that wasn't! */
+			unsigned char pseudoTerm = 0;
+			fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
+		}
+		fwrite(in, sizeof(unsigned char), len, received_file);
+		fclose(received_file);
+	}
 }
 
 int send_message(void *message, int length, int write_mode, struct libwebsocket *wsi) {
-   if (wsi != NULL) {
-      int paddingSize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
-      unsigned char *buff = (unsigned char *) malloc(paddingSize + length);
-      memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), message, length);
+	if (wsi != NULL) {
+		int paddingSize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
+		unsigned char *buff = (unsigned char *) malloc(paddingSize + length);
+		memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), message, length);
 
-      int res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], length, write_mode);
+		int res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], length, write_mode);
 
-      if(res < 0) {
-    	  fprintf(stderr, "erros sending, %d!\n", res);
-      }
+		if(res < 0) {
+			fprintf(stderr, "erros sending, %d!\n", res);
+		}
 
       free(buff);
       return EXIT_SUCCESS;
    }
    return EXIT_FAILURE;
-}
-
-void setTotalFragments(struct per_session_data *psd) {
-	long slicenr = 0;
-	long remain = psd->filesize;
-	while (remain) {
-		long toCpy = remain > PAYLOAD-5 ? PAYLOAD-5 : remain;
-		remain -= toCpy;
-		slicenr++;
-	}
-	psd->total_packets = slicenr;
-}
-
-void initFileInfo(struct per_session_data *psd) {
-	if( access( psd->filedir, F_OK ) != -1 ) {
-		FILE *fileptr = fopen(psd->filedir, "rb");
-		fseek(fileptr, 0, SEEK_END);
-		long filelen = ftell(fileptr);
-		rewind(fileptr);
-		psd->filesize = filelen;
-		setTotalFragments(psd);
-		fprintf(stderr, "file read success %s\n", psd->filedir);
-		fclose(fileptr);
-	} else {
-		fprintf(stderr, "fileread fail\n");
-	    psd->nok = true;
-	}
-}
-
-unsigned char *getFragment(struct per_session_data *psd) {
-	fprintf(stderr, "filedir: %s\n", psd->filedir);
-	FILE *fileptr = fopen(psd->filedir, "rb");
-	long remain =psd->filesize;
-	long slicenr = 0;
-	rewind(fileptr);
-
-	unsigned char *buffer = (unsigned char *)malloc((PAYLOAD)*sizeof(unsigned char));
-	while (remain) {
-		long toCpy = remain > PAYLOAD ? PAYLOAD : remain;
-		remain -= toCpy;
-		fread(buffer, 1, toCpy, fileptr);
-		if(slicenr == psd->package_to_send) {
-			psd->sendsize = toCpy;
-			break;
-		}
-		slicenr++;
-	}
-	fprintf(stderr, "sendsize: %d\n", psd->sendsize);
-	fclose(fileptr);
-	return buffer;
-
 }
 
 void putVideoInList(char *filename) {
@@ -198,7 +155,15 @@ void *initBentoFragmention(void *fName) {
 	char *fileName = (char*)fName;
 	fprintf(stderr, "bento Filename: \n%s\n", fileName);
 
-	char *bentoCmd = stringAppender(BENTOSCRIPT, fileName);
+	char *tempString1 = stringAppender(BENTOSCRIPT, fileName);
+	char *tempString2 = stringAppender(tempString1, " ");
+	free(tempString1);
+	tempString1 = stringAppender(tempString2, k);
+	free(tempString2);
+	tempString2 = stringAppender(tempString1, " ");
+	free(tempString1);
+	char *bentoCmd = stringAppender(tempString2, m);
+
 	int res = system(bentoCmd);
 	if(res < 0) {
 		fprintf(stderr, "Failed to run %s\n", bentoCmd);
@@ -253,7 +218,7 @@ static int callback_upload(struct libwebsocket_context * ctx, struct libwebsocke
 
 		if (lws_frame_is_binary(wsi) && thisUser->grantedUpload) {
 			receiveFile(in, len, thisUser);
-			received++;
+			received++; //ta bort
 			if(thisUser->uploadComplete) {
 				uploadComplete(ctx, thisUser);
 			}
@@ -273,11 +238,25 @@ static int callback_upload(struct libwebsocket_context * ctx, struct libwebsocke
 		break;
 	case LWS_CALLBACK_SERVER_WRITEABLE:
 		if(thisUser->grantedUpload && (hashmap_get(thisUser->filename, strlen(thisUser->filename) + 1, videoMap) == NULL)) {
-			send_message(OK, strlen(OK), LWS_WRITE_TEXT, wsi);
-			pthread_mutex_lock(&mutex);
-			putVideoInMap(thisUser->filename);
-			pthread_mutex_unlock(&mutex);
-			fprintf(stderr, "skickat ok\n");
+			char *shortendFileN = noMp4(thisUser->filename);
+			if( access( shortendFileN, F_OK ) != -1 ) {
+				send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
+			} else {
+				char *mkdir = stringAppender("mkdir ", shortendFileN);
+				int res = system(mkdir);
+				if(res < 0) {
+					fprintf(stderr, "Failed to run mkdir\n");
+					exit(EXIT_FAILURE);
+				}
+				free(mkdir);
+
+				send_message(OK, strlen(OK), LWS_WRITE_TEXT, wsi);
+				pthread_mutex_lock(&mutex);
+				putVideoInMap(thisUser->filename);
+				pthread_mutex_unlock(&mutex);
+				fprintf(stderr, "skickat ok\n");
+				free(shortendFileN);
+			}
 		} else {
 			thisUser->grantedUpload = false;
 			send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
@@ -293,49 +272,97 @@ static int callback_upload(struct libwebsocket_context * ctx, struct libwebsocke
 	return 0;
 }
 
-void stream_audio_video(char* in, struct per_session_data *psd, struct libwebsocket_context *ctx, struct libwebsocket *wsi, bool isVideo) {
-	char *inString = (char*)in;
+void setTotalFragments(struct per_session_data *psd) {
+	long slicenr = 0;
+	long remain = psd->filesize;
+	while (remain) {
+		long toCpy = remain > PAYLOAD-5 ? PAYLOAD-5 : remain;
+		remain -= toCpy;
+		slicenr++;
+	}
+	psd->total_packets = slicenr;
+}
 
-	if(startsWith(INI, inString)) {
-		inString += strlen(INI) + 1;
-		if((hashmap_get(inString, strlen(inString) + 1, videoMap) != NULL)) {
-			psd->filename = inString;
-			char *dir;
+void initFileInfo(struct per_session_data *psd) {
+	if( access( psd->filedir, F_OK ) != -1 ) {
+		FILE *fileptr = fopen(psd->filedir, "rb");
+		fseek(fileptr, 0, SEEK_END);
+		long filelen = ftell(fileptr);
+		rewind(fileptr);
+		psd->filesize = filelen;
+		setTotalFragments(psd);
+		fprintf(stderr, "file read success %s\n", psd->filedir);
+		fclose(fileptr);
+	} else {
+		fprintf(stderr, "fileread fail\n");
+	    psd->nok = true;
+	}
+}
+
+unsigned char *getFragment(struct per_session_data *psd) {
+	fprintf(stderr, "filedir: %s\n", psd->filedir);
+	FILE *fileptr = fopen(psd->filedir, "rb");
+	long remain =psd->filesize;
+	long slicenr = 0;
+	rewind(fileptr);
+
+	unsigned char *buffer = (unsigned char *)malloc((PAYLOAD)*sizeof(unsigned char));
+	while (remain) {
+		long toCpy = remain > PAYLOAD ? PAYLOAD : remain;
+		remain -= toCpy;
+		fread(buffer, 1, toCpy, fileptr);
+		if(slicenr == psd->package_to_send) {
+			psd->sendsize = toCpy;
+			break;
+		}
+		slicenr++;
+	}
+	fprintf(stderr, "sendsize: %d\n", psd->sendsize);
+	fclose(fileptr);
+	return buffer;
+
+}
+
+void stream_audio_video(char* in, struct per_session_data *psd, struct libwebsocket_context *ctx, struct libwebsocket *wsi, bool isVideo) {
+	char *fileName = (char*)in;
+
+	if(startsWith(INI, fileName)) {
+		fileName += strlen(INI) + 1;
+		if((hashmap_get(fileName, strlen(fileName) + 1, videoMap) != NULL)) {
+			removeSubstring(fileName, ".mp4");
 			if(isVideo) {
-				dir = setVideoDirectory(psd->filename);
+				psd->filedir = stringAppender(fileName, "/vinit");
 			} else {
-				dir = setAudioDirectory(psd->filename);
+				psd->filedir = stringAppender(fileName, "/ainit");
 			}
-			psd->filedir = stringAppender(dir, "init.mp4");
 			psd->package_to_send = 0;
-			free(dir);
 			psd->nok = false;
+			fprintf(stderr, "filedir: %s\n", psd->filedir);
 			initFileInfo(psd);
 			libwebsocket_callback_on_writable(ctx, wsi);
 		} else {
 			psd->nok = true;
 			libwebsocket_callback_on_writable(ctx, wsi);
 		}
-	} else if(startsWith(GET, inString)) {
-		inString += strlen(GET) + 1;
-		strtok(inString, TAB);
+	} else if(startsWith(GET, fileName)) {
+		libwebsocket_rx_flow_control (wsi, 1);
+		fileName += strlen(GET) + 1;
+		strtok(fileName, TAB);
 		char *sliceNr =  strtok(NULL, TAB);
-		if((hashmap_get(inString, strlen(inString) + 1, videoMap) != NULL)) {
-			psd->filename = inString;
+		if((hashmap_get(fileName, strlen(fileName) + 1, videoMap) != NULL)) {
 			char *dir;
 			if(isVideo) {
-				dir = setVideoDirectory(psd->filename);
+				dir = setVideoDirectory(fileName);
 			} else {
-				dir = setAudioDirectory(psd->filename);
+				dir = setAudioDirectory(fileName);
 			}
 
-			char *tempString1 = stringAppender(dir, "seg-");
-			char *tempString2 = stringAppender(tempString1, sliceNr);
-			psd->filedir = stringAppender(tempString2, ".m4f");
+			char *tempString1 = stringAppender(dir, "d");
+			psd->filedir = stringAppender(tempString1, sliceNr);
 			psd->package_to_send = 0;
+			fprintf(stderr, "filedir: %s\n", psd->filedir);
 
 			free(tempString1);
-			free(tempString2);
 			free(dir);
 			psd->nok = false;
 			initFileInfo(psd);
@@ -372,6 +399,7 @@ static int callback_video(struct libwebsocket_context *ctx, struct libwebsocket 
 		break;
 	case LWS_CALLBACK_SERVER_WRITEABLE:
 		if(psd->nok) {
+			fprintf(stderr, "skickar nok\n");
 			send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
 			free(psd->filedir);
 		} else if(psd->package_to_send < psd->total_packets) {
@@ -381,6 +409,7 @@ static int callback_video(struct libwebsocket_context *ctx, struct libwebsocket 
 			psd->package_to_send = psd->package_to_send + 1;
 			libwebsocket_callback_on_writable(ctx, wsi);
 		} else {
+			fprintf(stderr, "video sending EOS\n");
 			send_message(EOS, strlen(EOS), LWS_WRITE_TEXT, wsi);
 			free(psd->filedir);
 		}
@@ -415,6 +444,7 @@ static int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket 
 		break;
 	case LWS_CALLBACK_SERVER_WRITEABLE:
 		if(psd->nok) {
+			fprintf(stderr, "skickar nok\n");
 			send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
 			free(psd->filedir);
 		} else if(psd->package_to_send < psd->total_packets) {
@@ -424,6 +454,7 @@ static int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket 
 			psd->package_to_send = psd->package_to_send + 1;
 			libwebsocket_callback_on_writable(ctx, wsi);
 		} else {
+			fprintf(stderr, "audio sending EOS\n");
 			send_message(EOS, strlen(EOS), LWS_WRITE_TEXT, wsi);
 			free(psd->filedir);
 		}
@@ -489,7 +520,8 @@ static int callback_info(struct libwebsocket_context *ctx, struct libwebsocket *
 				if((hashmap_get(inString, strlen(inString) + 1, videoMap) != NULL)) {
 					thisUser->cmd = mpd;
 					char *dir = setMPDDirectory(inString);
-					thisUser->mpd_filedir = stringAppender(dir, "stream.mpd");
+					removeSubstring(inString, ".mp4");
+					thisUser->mpd_filedir = stringAppender(inString, "/mpd");
 					free(dir);
 					libwebsocket_callback_on_writable(ctx, wsi);
 				}
@@ -527,21 +559,60 @@ void sighandler(int sig) {
 	force_exit = 1;
 }
 
-int main(void) {
-   signal(SIGINT, sighandler);
+int main(int argc, char *argv[]) {
+	signal(SIGINT, sighandler);
+	int PORT;
 
-   struct lws_context_creation_info info;
-   memset(&info, 0, sizeof(info));
-   info.port = PORT;
-   info.gid = -1;
-   info.uid = -1;
-   info.protocols = protocols;
+	int c;
 
-   videoMap = hashmap_empty(20, string_hash_function, entry_free_func);
-   videoList = llist_empty(free);
-   pthread_mutex_init(&mutex, NULL);
+	int kflag = 0;
+	int mflag = 0;
+	int pflag = 0;
+	while ((c = getopt (argc, argv, "k:m:p:")) != -1) {
+		switch(c) {
+		case 'k':
+			kflag = 1;
+			k = malloc(sizeof(char) * (strlen(optarg) + 1));
+			strcpy(k, optarg);
+			break;
+		case 'm':
+			mflag = 1;
+			m = malloc(sizeof(char) * (strlen(optarg) + 1));
+			strcpy(m, optarg);
+			break;
+		case 'p':
+			pflag = 1;
+			PORT = atoi(optarg);
+			break;
+		case '?':
+			fprintf(stderr, "./Server -k <k> -m <m> -p <port>\n");
+			exit(1);
+			break;
+		default:
+			fprintf(stderr, "./Server -k <k> -m <m> -p <port>\n");
+			exit(1);
+		}
+	}
 
-   printf("starting server...\n");
+	if(kflag == 0 || mflag == 0 || pflag == 0) {
+		fprintf(stderr, "./Server -k <k> -m <m> -p <port>\n");
+		exit(1);
+	}
+
+	struct lws_context_creation_info info;
+	memset(&info, 0, sizeof(info));
+	info.port = PORT;
+	info.gid = -1;
+	info.uid = -1;
+	info.protocols = protocols;
+
+	videoMap = hashmap_empty(20, string_hash_function, entry_free_func);
+	videoList = llist_empty(free);
+	//putVideoInList("test.mp4");
+	//putVideoInMap("test.mp4");
+	pthread_mutex_init(&mutex, NULL);
+
+	printf("starting server...\n");
    context = libwebsocket_create_context(&info);
    if (context == NULL) {
       fprintf(stderr, "libwebsocket init failed\n");
@@ -552,6 +623,8 @@ int main(void) {
       libwebsocket_service(context, 500);
    }
    libwebsocket_context_destroy(context);
+   free(k);
+   free(m);
    llist_free(videoList);
    hashmap_free(videoMap);
    return EXIT_SUCCESS;

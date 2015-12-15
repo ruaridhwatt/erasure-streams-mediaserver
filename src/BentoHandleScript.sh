@@ -1,24 +1,45 @@
 #!/bin/sh
-if [ "$#" -ge 1 ] && [ "$#" -le 2 ]
+if [ "$#" -ge 3 ] && [ "$#" -le 4 ]
 then
    filename="$1"
-   dirstring="dir"
-   noMp4=${filename%.mp4}  
-   moviefrag=$noMp4
+   noMp4=${filename%.mp4}
+   fragname=$noMp4"f.mp4"  
 
-   bentoFragmentString="Bento4/bin/mp4fragment"
+   directory="cd "$noMp4
+   $directory   
+   
+   bentoFragmentString=$BENTO4_HOME"bin/mp4fragment "$1" "$fragname" --fragment-duration 86400000"
+   
+   $bentoFragmentString   
 
-   bentoEndString=$bentoFragmentString" "$filename" "$moviefrag
-   echo ${bentoEndString}
-   $bentoEndString
+   rmfile="rm "$1
+   $rmfile 
 
-   bentoDashString="Bento4/bin/mp4dash --output-dir="  
+   bentoDash=$BENTO4_HOME"bin/mp4dash --mpd-name=mpd --no-media "$fragname" -o ./"
+   $bentoDash
 
-   bentoEndString=$bentoDashString$moviefrag"dir "$moviefrag
-   echo ${bentoEndString}
-   $bentoEndString
+   bentoSplitAudio=$BENTO4_HOME"bin/mp4split "$fragname" --audio --media-segment adata --init-segment ainit"
+   $bentoSplitAudio
+
+   bentoSplitVideo=$BENTO4_HOME"bin/mp4split "$fragname" --video --media-segment vdata --init-segment vinit"
+   $bentoSplitVideo
+
+   rmfile="rm "$fragname
+   $rmfile 
+
+   crs_audstring=$CRS_HOME"crs_erasure_codes -e -k"$2" -m"$3" adata aenc"
+   $crs_audstring
+
+   rmdata="rm adata"
+   $rmdata
+
+   crs_vidstring=$CRS_HOME"crs_erasure_codes -e -k"$2" -m"$3" vdata venc"
+   $crs_vidstring
+
+   rmdata="rm vdata"
+   $rmdata
+
    
 else
    echo "Wrong number of arguments"
 fi
-
