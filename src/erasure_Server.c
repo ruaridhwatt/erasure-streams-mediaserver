@@ -24,7 +24,7 @@
 #include "hashmapSettings.h"
 #include "string_functions.h"
 
-#define PAYLOAD 35000
+#define PAYLOAD 1024*1024
 #define UPLOAD 1024*1024
 
 #define OK "OK"
@@ -552,9 +552,9 @@ static int callback_info(struct libwebsocket_context *ctx, struct libwebsocket *
 
 static struct libwebsocket_protocols protocols[] = {
 		{"upload", callback_upload, sizeof(struct upload_user), UPLOAD, 0},
-		{"info", callback_info, sizeof(struct info_user) , PAYLOAD},
-		{"audio", callback_audio, sizeof(struct per_session_data) , PAYLOAD},
-		{"video", callback_video, sizeof(struct per_session_data) , PAYLOAD}, { NULL, NULL, 0 }};
+		{"info", callback_info, sizeof(struct info_user) , PAYLOAD, 0},
+		{"audio", callback_audio, sizeof(struct per_session_data) , PAYLOAD, 0},
+		{"video", callback_video, sizeof(struct per_session_data) , PAYLOAD, 0}, { NULL, NULL, 0 }};
 
 void sighandler(int sig) {
 	force_exit = 1;
