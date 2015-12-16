@@ -24,7 +24,7 @@
 #include "hashmapSettings.h"
 #include "string_functions.h"
 
-#define PAYLOAD 35000
+#define PAYLOAD 10*1024
 #define UPLOAD 1024*1024
 
 #define OK "OK"
@@ -44,7 +44,7 @@
 #define LIST_STREAMS "lst"
 
 #define CMD_SIZE 3
-#define BENTOSCRIPT "./BentoHandleScript.sh "
+#define BENTOSCRIPT "scripts/BentoHandleScript.sh "
 #define FILEHANDLESCRIPT "./FileHandleScript.sh "
 
 int received = 0;
@@ -345,7 +345,6 @@ void stream_audio_video(char* in, struct per_session_data *psd, struct libwebsoc
 			libwebsocket_callback_on_writable(ctx, wsi);
 		}
 	} else if(startsWith(GET, fileName)) {
-		libwebsocket_rx_flow_control (wsi, 1);
 		fileName += strlen(GET) + 1;
 		strtok(fileName, TAB);
 		char *sliceNr =  strtok(NULL, TAB);
@@ -382,6 +381,7 @@ static int callback_video(struct libwebsocket_context *ctx, struct libwebsocket 
 	switch (reason) {
 
 	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		libwebsocket_rx_flow_control (wsi, 1);
 		break;
 	case LWS_CALLBACK_ESTABLISHED:
 		printf("Client video connection established\n");
@@ -428,6 +428,7 @@ static int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket 
 	switch (reason) {
 
 	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		libwebsocket_rx_flow_control (wsi, 1);
 		break;
 	case LWS_CALLBACK_ESTABLISHED:
 		printf("Client audio connection established\n");
@@ -551,9 +552,9 @@ static int callback_info(struct libwebsocket_context *ctx, struct libwebsocket *
 
 static struct libwebsocket_protocols protocols[] = {
 		{"upload", callback_upload, sizeof(struct upload_user), UPLOAD, 0},
-		{"info", callback_info, sizeof(struct info_user) , PAYLOAD},
-		{"audio", callback_audio, sizeof(struct per_session_data) , PAYLOAD},
-		{"video", callback_video, sizeof(struct per_session_data) , PAYLOAD}, { NULL, NULL, 0 }};
+		{"info", callback_info, sizeof(struct info_user) , PAYLOAD, 0},
+		{"audio", callback_audio, sizeof(struct per_session_data) , PAYLOAD, 0},
+		{"video", callback_video, sizeof(struct per_session_data) , PAYLOAD, 0}, { NULL, NULL, 0 }};
 
 void sighandler(int sig) {
 	force_exit = 1;
