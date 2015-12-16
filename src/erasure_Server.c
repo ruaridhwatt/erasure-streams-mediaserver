@@ -608,8 +608,8 @@ int main(int argc, char *argv[]) {
 
 	videoMap = hashmap_empty(20, string_hash_function, entry_free_func);
 	videoList = llist_empty(free);
-	//putVideoInList("test.mp4");
-	//putVideoInMap("test.mp4");
+	putVideoInList("test.mp4");
+	putVideoInMap("test.mp4");
 	pthread_mutex_init(&mutex, NULL);
 
 	printf("starting server...\n");

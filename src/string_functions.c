@@ -62,7 +62,6 @@ char *setMPDDirectory(char*fileName) {
 	removeSubstring(shortendFileN, ".mp4");
 	char *directory = "dir/";
 	char *filedir = stringAppender(shortendFileN, directory);
-	fprintf(stderr, "hej2\n");
 	free(shortendFileN);
 	return filedir;
 }
