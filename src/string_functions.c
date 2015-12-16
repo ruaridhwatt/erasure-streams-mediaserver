@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
+#include <pthread.h>
+#include <libwebsockets.h>
+#include <unistd.h>
 #include "string_functions.h"
 
 bool startsWith(const char *pre, const char *str) {
@@ -56,16 +60,6 @@ char *noMp4(char *fileName) {
 	return shortendFileN;
 }
 
-char *setMPDDirectory(char*fileName) {
-	char *shortendFileN = malloc(sizeof(char) * (strlen(fileName) + 1));
-	strcpy(shortendFileN,fileName);
-	removeSubstring(shortendFileN, ".mp4");
-	char *directory = "dir/";
-	char *filedir = stringAppender(shortendFileN, directory);
-	free(shortendFileN);
-	return filedir;
-}
-
 char *setVideoSegFile(char*fileName) {
 	char *shortendFileN = malloc((sizeof(char) * strlen(fileName)) + 2);
 	removeSubstring(shortendFileN, ".m4f");
@@ -73,5 +67,17 @@ char *setVideoSegFile(char*fileName) {
 	char *filedir = stringAppender(shortendFileN, directory);
 	free(shortendFileN);
 	return filedir;
+}
+
+bool isDirectory(char *fileName) {
+	char *tempString1 = noMp4(fileName);
+	char *fileDir = stringAppender(tempString1, "/");
+	bool isDirectory = false;
+	if ( access(fileDir, F_OK ) != -1 ) {
+		isDirectory = true;
+	}
+	free(tempString1);
+	free(fileDir);
+	return isDirectory;
 }
 

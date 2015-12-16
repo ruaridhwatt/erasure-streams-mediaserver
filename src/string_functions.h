@@ -11,6 +11,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
+#include <pthread.h>
+#include <libwebsockets.h>
+#include <unistd.h>
 
 bool startsWith(const char *pre, const char *str);
 
@@ -24,9 +28,8 @@ char *setAudioDirectory(char*fileName);
 
 char *noMp4(char *fileName);
 
-char *setMPDDirectory(char*fileName);
-
 char *setVideoSegFile(char*fileName);
 
+bool isDirectory(char *fileName);
 
 #endif /* STRING_FUNCTIONS_H_ */
