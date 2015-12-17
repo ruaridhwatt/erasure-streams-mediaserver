@@ -1,69 +1,15 @@
 #include "upload.h"
 
-int send_message(void *message, int length, int write_mode, struct libwebsocket *wsi) {
-	if (wsi != NULL) {
-		int paddingSize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
-		unsigned char *buff = (unsigned char *) malloc(paddingSize + length);
-		memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), message, length);
-
-		int res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], length, write_mode);
-
-		if(res < 0) {
-			fprintf(stderr, "erros sending, %d!\n", res);
-		}
-
-      free(buff);
-      return EXIT_SUCCESS;
-   }
-   return EXIT_FAILURE;
+char *appendString(char *s1, char *s2) {
+	char *s3 = (char *)malloc((strlen(s1) + strlen(s2) + 2)*sizeof(char));
+	strcpy(s3, s1);
+	strcat(s3, s2);
+	return s3;
 }
 
-void send_video_list(struct libwebsocket_context *ctx, struct libwebsocket *wsi) {
-	pthread_mutex_lock(&mutex);
-	element *position = llist_first(videoList);
-	char *tempString1 = malloc((sizeof(char) * strlen("video-list")) + 1);
-	strcpy(tempString1, "video-list");
-	char *tempString2;
-	while(!llist_isEnd(position)){
-		tempString2 = stringAppender(tempString1, "\t");
-		free(tempString1);
-		tempString1 = stringAppender(tempString2, (char*)llist_inspect(position));
-		free(tempString2);
-		position = llist_next(position);
-	}
-	pthread_mutex_unlock(&mutex);
-	send_message((char*)tempString1, strlen(tempString1) + 1, LWS_WRITE_TEXT, wsi);
-	free(tempString1);
-}
-
-void send_mpd(struct libwebsocket_context *ctx, struct libwebsocket *wsi, struct info_user * thisUser) {
-	fprintf(stderr, "filedir: %s\n", thisUser->mpd_filedir);
-	if(access(thisUser->mpd_filedir, F_OK ) != -1) {
-		FILE *fileptr = fopen(thisUser->mpd_filedir, "rb");
-		fseek(fileptr, 0, SEEK_END);
-		long filelen = ftell(fileptr);
-		rewind(fileptr);
-
-		unsigned char *buffer = (unsigned char *)malloc((PAYLOAD)*sizeof(unsigned char));
-		fread(buffer, 1, filelen, fileptr);
-		send_message(buffer, filelen, LWS_WRITE_BINARY, wsi);
-		fclose(fileptr);
-		free(buffer);
-	} else {
-		send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
-	}
-}
-
-void putVideoInList(char *filename) {
-	element *currentElement = llist_first(videoList);
-	char* video = malloc((sizeof(char) * strlen(filename)) + 1);
-	strcpy(video, filename);
-	llist_insert(currentElement, videoList, (char*)video);
-}
-
-void putVideoInMap(char *filename) {
-	entry *mentry = create_entry(filename, "localhost");
-	hashmap_put(mentry, videoMap);
+void removeMp4(char *fileName) {
+	while((fileName=strstr(fileName,".mp4")))
+		memmove(fileName,fileName+strlen(".mp4"),1+strlen(fileName+strlen(".mp4")));
 }
 
 void receiveFile(void *in, size_t len, struct upload_user *user) {
@@ -79,24 +25,20 @@ void receiveFile(void *in, size_t len, struct upload_user *user) {
 		user->terminatorReceived = true;
 	} else {
 		printf("%d\n", (int)len);
-		char *shortendFileN = noMp4(user->filename);
-		char *tempString1 = stringAppender(shortendFileN, "/");
-		char *filestr = stringAppender(tempString1, user->filename);
+		FILE *received_file = fopen(user->mp4Dir, "a+b");
 
-		FILE *received_file = fopen(filestr, "a+b");
-		free(tempString1);
-		free(shortendFileN);
-		free(filestr);
 		if (received_file == NULL) {
 			fprintf(stderr, "Failed to open file %s\n", user->filename);
 			exit(EXIT_FAILURE);
 		}
+
 		if (user->terminatorReceived == true) {
 			user->terminatorReceived = false;
 			/* Write terminator that wasn't! */
 			unsigned char pseudoTerm = 0;
 			fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
 		}
+
 		fwrite(in, sizeof(unsigned char), len, received_file);
 		fclose(received_file);
 	}
@@ -107,24 +49,21 @@ void *initBentoFragmention(void *fName) {
 	char *fileName = (char*)fName;
 	fprintf(stderr, "bento Filename: \n%s\n", fileName);
 
-	char *tempString1 = stringAppender(BENTOSCRIPT, fileName);
-	char *tempString2 = stringAppender(tempString1, " ");
+	char *tempString1 = appendString(BENTOSCRIPT, fileName);
+	char *tempString2 = appendString(tempString1, " ");
 	free(tempString1);
-	tempString1 = stringAppender(tempString2, k);
+	tempString1 = appendString(tempString2, k);
 	free(tempString2);
-	tempString2 = stringAppender(tempString1, " ");
+	tempString2 = appendString(tempString1, " ");
 	free(tempString1);
-	char *bentoCmd = stringAppender(tempString2, m);
+	char *bentoCmd = appendString(tempString2, m);
 
+	fprintf(stderr, "bentoCmd: %s\n", bentoCmd);
 	int res = system(bentoCmd);
 	if(res < 0) {
 		fprintf(stderr, "Failed to run %s\n", bentoCmd);
 		exit(EXIT_FAILURE);
 	}
-
-	pthread_mutex_lock(&mutex);
-	putVideoInList(fileName);
-	pthread_mutex_unlock(&mutex);
 
 	free(bentoCmd);
 	free(fileName);
@@ -146,12 +85,28 @@ void uploadComplete(struct libwebsocket_context * ctx, struct upload_user *thisU
 	}
 	thisUser->uploadComplete = false;
 	free(thisUser->filename);
+	free(thisUser->dir);
+	free(thisUser->dotDir);
+	free(thisUser->mp4Dir);
+}
+
+UPL_CMDS getUPLCommand(char *in) {
+
+	if(strncmp(START_UPLOAD, in, strlen(START_UPLOAD)) == 0) {
+		return UPL;
+	}
+	return UNKNOWN;
 }
 
 int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
 
 	struct upload_user * thisUser = (struct upload_user *) user;
+	UPL_CMDS c;
+	char *videoDir;
+	int paddingSize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
+	unsigned char *buff;
+	int res;
 	switch (reason) {
 
 	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
@@ -172,99 +127,66 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 			if(thisUser->uploadComplete) {
 				uploadComplete(ctx, thisUser);
 			}
+
 		} else if(!lws_frame_is_binary(wsi)) {
-			char *inString = (char*)in;
-			if(startsWith(START_UPLOAD, inString)) {
-				inString += strlen(START_UPLOAD) + 1;
-				printf((char*) in);
-				thisUser->grantedUpload = true;
-				thisUser->uploadComplete = false;
-				thisUser->filename = (char *)malloc((strlen(inString) + 1)*sizeof(char));
-				strcpy(thisUser->filename, inString);
-				fprintf(stderr, "FileName: %s\n", thisUser->filename);
-				libwebsocket_callback_on_writable(ctx, wsi);
-			}
-		}
-		break;
-	case LWS_CALLBACK_SERVER_WRITEABLE:
-		if(thisUser->grantedUpload && (hashmap_get(thisUser->filename, strlen(thisUser->filename) + 1, videoMap) == NULL)) {
-			char *shortendFileN = noMp4(thisUser->filename);
-			if( access( shortendFileN, F_OK ) != -1 ) {
-				send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
-			} else {
-				char *mkdir = stringAppender("mkdir ", shortendFileN);
-				int res = system(mkdir);
+			c = getUPLCommand(in);
+			videoDir = getenv("VIDEO_DIR");
+
+			switch (c) {
+			case UPL:
+				in += strlen(START_UPLOAD) + 1;
+
+				thisUser->filename = (char *)malloc((len + 1)*sizeof(char));
+
+				strcpy(thisUser->filename, in);
+				thisUser->dir = appendString(videoDir, thisUser->filename);
+				removeMp4(thisUser->dir);
+
+				char *dotFileName = appendString(".", thisUser->filename);
+				thisUser->dotDir = appendString(videoDir, dotFileName);
+				removeMp4(thisUser->dotDir);
+
+				char *tempString = appendString(thisUser->dotDir, "/");
+				thisUser->mp4Dir = appendString(tempString, thisUser->filename);
+
+				if((access( thisUser->dir, F_OK ) != -1 ) || (access( thisUser->dotDir, F_OK ) != -1 )) {
+
+					buff = (unsigned char *) malloc(paddingSize + 3);
+					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "NOK", 3);
+					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 3, LWS_WRITE_TEXT);
+
+				} else {
+					thisUser->grantedUpload = true;
+					thisUser->uploadComplete = false;
+					char *mkdir = appendString("mkdir ", thisUser->dotDir);
+					int sysres = system(mkdir);
+					if(sysres < 0) {
+						fprintf(stderr, "Failed to run mkdir\n");
+						free(mkdir);
+						exit(EXIT_FAILURE);
+					}
+					free(mkdir);
+					free(dotFileName);
+
+					buff = (unsigned char *) malloc(paddingSize + 2);
+					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "OK", 2);
+					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 2, LWS_WRITE_TEXT);
+				}
+
 				if(res < 0) {
-					fprintf(stderr, "Failed to run mkdir\n");
-					exit(EXIT_FAILURE);
+					fprintf(stderr, "lws_write < 0\n");
 				}
-				free(mkdir);
 
-				send_message(OK, strlen(OK), LWS_WRITE_TEXT, wsi);
-				pthread_mutex_lock(&mutex);
-				putVideoInMap(thisUser->filename);
-				pthread_mutex_unlock(&mutex);
-				fprintf(stderr, "skickat ok\n");
-				free(shortendFileN);
-			}
-		} else {
-			thisUser->grantedUpload = false;
-			send_message(NOK, strlen(NOK), LWS_WRITE_TEXT, wsi);
-		}
-		break;
-
-	case LWS_CALLBACK_CLOSED:
-		printf("Connection Closed\n");
-		break;
-	default:
-		break;
-	}
-	return 0;
-}
-
-int callback_info(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason,
-		void *user, void *in, size_t len) {
-
-	struct info_user * thisUser = (struct info_user *) user;
-	switch (reason) {
-	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
-		break;
-	case LWS_CALLBACK_ESTABLISHED:
-		printf("Client info connection established\n");
-
-		break;
-	case LWS_CALLBACK_RECEIVE:
-		if (!lws_frame_is_binary(wsi)) {
-			char *inString = (char*)in;
-			if(startsWith(LIST_STREAMS, inString)) {
-				thisUser->cmd = list;
-				libwebsocket_callback_on_writable(ctx, wsi);
-
-			} else if (startsWith(MPD, inString)){
-				inString += strlen(MPD) + 1;
-				if((hashmap_get(inString, strlen(inString) + 1, videoMap) != NULL)) {
-					thisUser->cmd = mpd;
-					removeSubstring(inString, ".mp4");
-					thisUser->mpd_filedir = stringAppender(inString, "/mpd");
-					libwebsocket_callback_on_writable(ctx, wsi);
-				}
+				free(tempString);
+				free(dotFileName);
+				break;
+			default:
+				break;
 			}
 		}
 		break;
 	case LWS_CALLBACK_CLOSED:
 		printf("Connection Closed\n");
-		break;
-	case LWS_CALLBACK_SERVER_WRITEABLE:
-		switch(thisUser->cmd) {
-		case list:
-			send_video_list(ctx, wsi);
-			break;
-		case mpd:
-			send_mpd(ctx, wsi, thisUser);
-			break;
-		default:
-			break;
-		}
 		break;
 	default:
 		break;
