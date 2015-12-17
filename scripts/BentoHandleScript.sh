@@ -5,8 +5,9 @@ then
    noMp4=${filename%.mp4}
    fragname=$noMp4"f.mp4"  
 
-   directory="cd "$noMp4
+   directory="cd "$VIDEO_DIR"."$noMp4
    $directory   
+   echo ${directory}
    
    bentoFragmentString=$BENTO4_HOME"bin/mp4fragment "$1" "$fragname" --fragment-duration 86400000"
    
@@ -18,10 +19,10 @@ then
    bentoDash=$BENTO4_HOME"bin/mp4dash --mpd-name=mpd --no-media "$fragname" -o ./"
    $bentoDash
 
-   bentoSplitAudio=$BENTO4_HOME"bin/mp4split "$fragname" --audio --media-segment adata --init-segment ainit"
+   bentoSplitAudio=$BENTO4_HOME"bin/mp4split "$fragname" --audio --media-segment adata --init-segment ainit.mp4"
    $bentoSplitAudio
 
-   bentoSplitVideo=$BENTO4_HOME"bin/mp4split "$fragname" --video --media-segment vdata --init-segment vinit"
+   bentoSplitVideo=$BENTO4_HOME"bin/mp4split "$fragname" --video --media-segment vdata --init-segment vinit.mp4"
    $bentoSplitVideo
 
    rmfile="rm "$fragname
