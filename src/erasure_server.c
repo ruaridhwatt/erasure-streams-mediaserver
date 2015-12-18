@@ -23,38 +23,25 @@
 #include "erasure_server.h"
 
 static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), 0 }, { "info", callback_info,
-		sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, { "video", callback_video,
-		sizeof(struct toSend), 0 }, { NULL, NULL, 0 } };
+		sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, { "video", callback_video, sizeof(struct toSend), 0 }, {
+NULL, NULL, 0 } };
 
 static volatile int force_exit = 0;
 
 int main(int argc, char *argv[]) {
 	int port, res, c, k, m;
-	char *dest;
+	char *envVars[NR_ENV_VARS];
 	struct lws_context_creation_info info;
 	struct libwebsocket_context *context;
 
 	signal(SIGINT, sighandler);
 
-	/* Check all env variables are set correctly */
-	dest = getenv(VIDEO_DIR_ENV_VAR);
-	if (dest == NULL) {
-		fprintf(stderr, "VIDEO_DIR environment variable not set!\n");
-		return EXIT_FAILURE;
-	}
-	if (dest[strlen(dest) - 1] != '/') {
-		fprintf(stderr, "VIDEO_DIR environment variable must end in /!\n");
-		return EXIT_FAILURE;
-	}
-	dest = getenv("BENTO4_HOME");
-	if (dest == NULL) {
-		fprintf(stderr, "BENTO4_HOME environment variable not set!\n");
-		return EXIT_FAILURE;
-	}
-	dest = getenv("CRS_HOME");
-	if (dest == NULL) {
-		fprintf(stderr, "CRS_HOME environment variable not set!\n");
-		return EXIT_FAILURE;
+	envVars[0] = VIDEO_DIR_ENV_VAR;
+	envVars[1] = BENTO4_ENV_VAR;
+	envVars[2] = CRS_ENV_VAR;
+	res = verifyEnvironmentSettings(envVars, NR_ENV_VARS);
+	if (res < 0) {
+		exit(1);
 	}
 
 	/* Parse command line arguments */
@@ -85,7 +72,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (res < 0 || port == -1 || k == -1 || m == -1) {
+	if (res < 0 || port < 1024 || k <= 0 || m <= 0 || m > k) {
 		print_usage(argv[0]);
 		exit(1);
 	}
@@ -125,6 +112,27 @@ int main(int argc, char *argv[]) {
 
 void sighandler(int sig) {
 	force_exit = 1;
+}
+
+int verifyEnvironmentSettings(char **envVars, size_t nrVars) {
+	int i, res;
+	char *dest;
+
+	res = 0;
+	for (i = 0; i < nrVars; i++) {
+		dest = getenv(envVars[i]);
+		if (dest == NULL) {
+			fprintf(stderr, "%s environment variable not set!\n", envVars[i]);
+			res = -1;
+			break;
+		}
+		if (dest[strlen(dest) - 1] != '/') {
+			fprintf(stderr, "%s environment variable must end in /!\n", envVars[i]);
+			res = -1;
+			break;
+		}
+	}
+	return res;
 }
 
 void print_usage(char *prog) {

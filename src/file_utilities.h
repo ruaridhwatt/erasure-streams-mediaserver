@@ -9,6 +9,9 @@
 #define FILE_UTILITIES_H_
 
 #define VIDEO_DIR_ENV_VAR "VIDEO_DIR"
+#define BENTO4_ENV_VAR "BENTO4_HOME"
+#define CRS_ENV_VAR "CRS_HOME"
+#define NR_ENV_VARS 3
 
 #define MAX_SEND_SIZE 1024 * 1024
 
