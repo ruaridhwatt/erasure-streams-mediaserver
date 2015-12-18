@@ -56,7 +56,7 @@ int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 			videoName = strtok(NULL, "\t");
 			segNr = strtok(NULL, "\t");
 			fprintf(stderr, "sending video seg %s\n", segNr);
-			s->data = getDataSegFile(videoName, segNr, VIDEO_DIR, DATA, &s->size);
+			s->data = getEncodedSeg(videoName, segNr, VIDEO, DATA, &s->size);
 			if (s->data == NULL) {
 				fprintf(stderr, "Could not get video seg!\n");
 			}

@@ -56,7 +56,7 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 			videoName = strtok(NULL, "\t");
 			segNr = strtok(NULL, "\t");
 			fprintf(stderr, "sending audio seg %s\n", segNr);
-			s->data = getDataSegFile(videoName, segNr, AUDIO_DIR, DATA, &s->size);
+			s->data = getEncodedSeg(videoName, segNr, AUDIO, DATA, &s->size);
 			if (s->data == NULL) {
 				fprintf(stderr, "Could not get audio seg!\n");
 			}

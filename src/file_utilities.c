@@ -54,7 +54,7 @@ unsigned char *getVideoList(size_t *size) {
 	return (unsigned char *) videoList;
 }
 
-unsigned char *getDataSegFile(char *videoName, char *segNr, char *subDir, enum SegType type, size_t *size) {
+unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track track, enum SegType type, size_t *size) {
 	char *videoDir;
 	char *filePath;
 	char *pos;
@@ -65,7 +65,7 @@ unsigned char *getDataSegFile(char *videoName, char *segNr, char *subDir, enum S
 	unsigned char *data;
 
 	videoDir = getenv(VIDEO_DIR_ENV_VAR);
-	filePath = (char *) malloc((strlen(videoDir) + strlen(videoName) + 1 + strlen(subDir) + 2 + strlen(segNr) + 1) * sizeof(char));
+	filePath = (char *) malloc((strlen(videoDir) + strlen(videoName) + 1 + DATA_DIR_SIZE + 2 + strlen(segNr) + 1) * sizeof(char));
 	if (filePath == NULL) {
 		return NULL;
 	}
@@ -77,8 +77,20 @@ unsigned char *getDataSegFile(char *videoName, char *segNr, char *subDir, enum S
 	pos += strlen(videoName);
 	*pos = '/';
 	pos++;
-	strcpy(pos, subDir);
-	pos += strlen(subDir);
+
+	switch (track) {
+	case AUDIO:
+		strcpy(pos, AUDIO_DIR);
+		pos += strlen(AUDIO_DIR);
+		break;
+	case VIDEO:
+		strcpy(pos, VIDEO_DIR);
+		pos += strlen(VIDEO_DIR);
+		break;
+	default:
+		free(filePath);
+		return NULL;
+	}
 
 	switch (type) {
 	case DATA:
@@ -92,7 +104,6 @@ unsigned char *getDataSegFile(char *videoName, char *segNr, char *subDir, enum S
 	default:
 		free(filePath);
 		return NULL;
-		break;
 	}
 
 	strcpy(pos, segNr);

@@ -17,15 +17,21 @@
 
 #define MPD_NAME "stream.mpd"
 #define AUDIO_INIT_NAME "ainit.mp4"
-#define AUDIO_DIR "aenc"
 #define VIDEO_INIT_NAME "vinit.mp4"
+
+#define AUDIO_DIR "aenc"
 #define VIDEO_DIR "venc"
+#define DATA_DIR_SIZE 4
 
 #define SWITCH_SERVER_KW "switch-server"
 #define NOK_KW "NOK"
 
 #define VIDEO_LIST_KW "video-list"
 #define MPD_KW "mpd-file"
+
+enum Track {
+	AUDIO, VIDEO
+};
 
 enum SegType {
 	DATA, CODING
@@ -42,6 +48,6 @@ unsigned char *getVideoList(size_t *size);
 
 unsigned char *getInfoFile(char *videoName, char *filename, size_t *size);
 
-unsigned char *getDataSegFile(char *videoName, char *segNr, char *subDir, enum SegType type, size_t *size);
+unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track t, enum SegType type, size_t *size);
 
 #endif /* FILE_UTILITIES_H_ */
