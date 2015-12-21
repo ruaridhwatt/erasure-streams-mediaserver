@@ -4,8 +4,7 @@
 #include <stdbool.h>
 #include <libwebsockets.h>
 
-#define K_STR_LEN 4
-#define M_STR_LEN 4
+
 #define START_UPLOAD "upl"
 #define BENTOSCRIPT "./scripts/BentoHandleScript.sh "
 
@@ -23,13 +22,11 @@ typedef enum {
 	UPL = 1, UNKNOWN = 0
 } UPL_CMDS;
 
-char kStr[K_STR_LEN];
-char mStr[M_STR_LEN];
-pthread_mutex_t mutex;
+
 
 char *appendString(char *s1, char *s2);
 void removeMp4(char *fileName);
-void receiveFile(void *in, size_t len, struct upload_user *user);
+int receiveFile(void *in, size_t len, struct upload_user *user);
 void *initBentoFragmention(void *fName);
 void uploadComplete(struct upload_user *thisUser);
 UPL_CMDS getUPLCommand(char *in);

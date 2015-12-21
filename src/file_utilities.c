@@ -9,7 +9,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <stdio.h>
+#include <regex.h>
 #include <libwebsockets.h>
+#include <pthread.h>
 #include "file_utilities.h"
 
 unsigned char *getVideoList(size_t *size) {
@@ -26,6 +28,7 @@ unsigned char *getVideoList(size_t *size) {
 	}
 
 	*size = strlen(VIDEO_LIST_KW);
+	pthread_mutex_lock(&mux);
 	while ((entry = readdir(dir)) != NULL) {
 		if (entry->d_name[0] != '.') {
 			*size += 1 + strlen(entry->d_name);
@@ -35,6 +38,7 @@ unsigned char *getVideoList(size_t *size) {
 
 	videoList = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + (*size * sizeof(char *)) + LWS_SEND_BUFFER_POST_PADDING);
 	if (videoList == NULL) {
+		pthread_mutex_unlock(&mux);
 		closedir(dir);
 		return NULL;
 	}
@@ -50,6 +54,7 @@ unsigned char *getVideoList(size_t *size) {
 			pos += strlen(entry->d_name);
 		}
 	}
+	pthread_mutex_unlock(&mux);
 	closedir(dir);
 	return (unsigned char *) videoList;
 }
@@ -187,4 +192,238 @@ unsigned char *getInfoFile(char *videoName, char *filename, size_t *size) {
 		return NULL;
 	}
 	return data;
+}
+
+FILE *prepUpload(char *filename) {
+	int i;
+	char *uploadDir, *streamDir, *pos, *filePath;
+	FILE *f;
+
+	uploadDir = getUploadDirPath(filename);
+	if (uploadDir == NULL) {
+		return NULL;
+	}
+
+	streamDir = __toStreamPath(uploadDir);
+	if (streamDir == NULL) {
+		free(uploadDir);
+		return NULL;
+	}
+
+	pthread_mutex_lock(&mux);
+	if (access(streamDir, F_OK) == 0 || access(uploadDir, F_OK) == 0) {
+		/* video exists */
+		pthread_mutex_unlock(&mux);
+		free(uploadDir);
+		free(streamDir);
+		return NULL;
+	}
+
+	free(streamDir);
+
+	if (mkdir(uploadDir, S_IRWXU | S_IRWXG) != 0) {
+		pthread_mutex_unlock(&mux);
+		free(uploadDir);
+		return NULL;
+	}
+	pthread_mutex_unlock(&mux);
+	filePath = (char *) malloc((strlen(uploadDir) + strlen(filename) + 1) * sizeof(char));
+	if (filePath == NULL) {
+		free(uploadDir);
+		return NULL;
+	}
+	pos = filePath;
+	strncpy(pos, uploadDir, strlen(uploadDir));
+	pos += strlen(uploadDir);
+	free(uploadDir);
+	strcpy(pos, filename);
+	f = fopen(filePath, "wb");
+	free(filePath);
+	return f;
+}
+
+int startFragmentation(char *filename) {
+	int res;
+	char *uploadDir, *filePath, *pos;
+	pthread_t detatchedWorker;
+	pthread_attr_t attr;
+
+	uploadDir = getUploadDirPath(filename);
+	if (uploadDir == NULL) {
+		return -1;
+	}
+	filePath = (char *) malloc((strlen(uploadDir) + strlen(filename) + 1) * sizeof(char));
+	if (filePath == NULL) {
+		free(uploadDir);
+		return -1;
+	}
+	pos = filePath;
+	strncpy(pos, uploadDir, strlen(uploadDir));
+	pos += strlen(uploadDir);
+	free(uploadDir);
+	strncpy(pos, filename, strlen(filename));
+	pos += strlen(filename);
+	*pos = '\0';
+
+	res = pthread_attr_init(&attr);
+	if (res != 0) {
+		free(filePath);
+		return -1;
+	}
+	res = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (res != 0) {
+		free(filePath);
+		pthread_attr_destroy(&attr);
+		return -1;
+	}
+	res = pthread_create(&detatchedWorker, &attr, __fragmentation_worker, (void *) filePath);
+	pthread_attr_destroy(&attr);
+	if (res != 0) {
+		free(filePath);
+		return -1;
+	}
+}
+
+void *__fragmentation_worker(void *filePath) {
+	int commandLen, res;
+	char *scriptDir, *command, *pos, *streamDir;
+
+	scriptDir = getenv(SCRIPT_ENV_VAR);
+
+	commandLen = strlen(scriptDir);
+	commandLen += strlen(FRAG_SCRIPT) + 1;
+	commandLen += strlen(kStr) + 1;
+	commandLen += strlen(mStr) + 1;
+
+	command = (char *) malloc(commandLen * sizeof(char));
+	if (command == NULL) {
+		return NULL;
+	}
+	strcpy(command, scriptDir);
+	strcat(command, FRAG_SCRIPT);
+	strcat(command, " ");
+	strcat(command, filePath);
+	strcat(command, " ");
+	strcat(command, kStr);
+	strcat(command, " ");
+	strcat(command, mStr);
+
+	res = system(command);
+
+	pos = strrchr(filePath, '/');
+	*pos = '\0';
+	if (res == 0) {
+		streamDir = __toStreamPath(filePath);
+		if (streamDir == NULL) {
+			res = -1;
+		} else {
+			pthread_mutex_lock(&mux);
+			res = rename(filePath, streamDir);
+			pthread_mutex_unlock(&mux);
+			free(streamDir);
+		}
+	}
+
+	if (res != 0) {
+		pos = strrchr(filePath, '/');
+		*pos = '\0';
+		strcpy(command, "rm -R ");
+		strcat(command, filePath);
+		pthread_mutex_lock(&mux);
+		system(command);
+		pthread_mutex_unlock(&mux);
+	}
+	free(command);
+	free(filePath);
+	return NULL;
+}
+
+char *__toStreamPath(char *uploadPath) {
+	int i;
+	char *streamPath, *pos;
+
+	streamPath = (char *) malloc(strlen(uploadPath) * sizeof(char));
+	if (streamPath == NULL) {
+		return NULL;
+	}
+	pos = strrchr(uploadPath, '.');
+	if (pos == NULL) {
+		return NULL;
+	}
+	i = uploadPath - pos;
+	strncpy(streamPath, uploadPath, i);
+	pos++;
+	strcpy(streamPath, pos);
+	return streamPath;
+}
+
+char *__getUploadDirPath(char *filename) {
+	int res;
+	char *videoHome, *subdir, *filepath, *pos;
+
+	res = validateUploadFilename(filename);
+	if (res != 0) {
+		return NULL;
+	}
+	videoHome = getenv(VIDEO_DIR_ENV_VAR);
+	if (videoHome == NULL) {
+		return NULL;
+	}
+	subdir = getUploadDirName(filename);
+	if (subdir == NULL) {
+		return NULL;
+	}
+	filepath = (char *) malloc((strlen(videoHome) + strlen(subdir) + 2) * sizeof(char));
+	if (filepath == NULL) {
+		free(subdir);
+		return NULL;
+	}
+	pos = filepath;
+	strncpy(pos, videoHome, strlen(videoHome));
+	pos += strlen(videoHome);
+	strncpy(pos, subdir, strlen(subdir));
+	pos += strlen(subdir);
+	free(subdir);
+	*pos = '/';
+	pos++;
+	*pos = '\0';
+
+	return filepath;
+}
+
+char *__getUploadDirName(char *filename) {
+	int i;
+	char *dir, *pos;
+
+	pos = strrchr(filename, '.');
+	if (pos == NULL) {
+		return filename;
+	}
+	i = pos - filename;
+	if (i == 0) {
+		return NULL;
+	}
+	dir = (char *) malloc((1 + i + 1) * sizeof(char));
+	dir[0] = '.';
+	strncpy(&dir[1], filename, i);
+	dir[i] = '\0';
+	return dir;
+}
+
+int __validateUploadFilename(char *filename) {
+	int res;
+	regex_t regex;
+
+	res = strlen(filename);
+	if (res <= 0 || res > MAX_VIDEO_NAME_LENGTH) {
+		return -1;
+	}
+
+	res = regcomp(&regex, FILENAME_REGEX, 0);
+	if (res != 0) {
+		return -1;
+	}
+	res = regexec(&regex, filename, 0, NULL, 0);
+	regfree(regex);
+	return res;
 }

@@ -9,9 +9,12 @@
 #define FILE_UTILITIES_H_
 
 #define VIDEO_DIR_ENV_VAR "VIDEO_DIR"
+#define SCRIPT_ENV_VAR "SCRIPT_HOME"
 #define BENTO4_ENV_VAR "BENTO4_HOME"
 #define CRS_ENV_VAR "CRS_HOME"
 #define NR_ENV_VARS 3
+
+#define FRAG_SCRIPT "fragcodeMp4.sh"
 
 #define MAX_SEND_SIZE 1024 * 1024
 
@@ -23,11 +26,20 @@
 #define VIDEO_DIR "venc"
 #define DATA_DIR_SIZE 4
 
+#define MAX_VIDEO_NAME_LENGTH 64
+#define FILENAME_REGEX "^[\w]+[\w.-]+[\w]+$"
+
 #define SWITCH_SERVER_KW "switch-server"
 #define NOK_KW "NOK"
 
 #define VIDEO_LIST_KW "video-list"
 #define MPD_KW "mpd-file"
+
+#define K_STR_LEN 4
+#define M_STR_LEN 4
+
+char kStr[K_STR_LEN];
+char mStr[M_STR_LEN];
 
 enum Track {
 	AUDIO, VIDEO
@@ -44,10 +56,20 @@ struct toSend {
 	int writeMode;
 };
 
+pthread_mutex_t mux;
+
 unsigned char *getVideoList(size_t *size);
+
+unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track t, enum SegType type, size_t *size);
 
 unsigned char *getInfoFile(char *videoName, char *filename, size_t *size);
 
-unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track t, enum SegType type, size_t *size);
+FILE *prepUpload(char *filename);
+
+char *__getUploadDirPath(char *filename);
+
+char *__getUploadDirName(char *filename);
+
+int __validateUploadFilename(char *filename);
 
 #endif /* FILE_UTILITIES_H_ */

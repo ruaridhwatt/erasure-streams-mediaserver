@@ -39,6 +39,7 @@ int main(int argc, char *argv[]) {
 	envVars[0] = VIDEO_DIR_ENV_VAR;
 	envVars[1] = BENTO4_ENV_VAR;
 	envVars[2] = CRS_ENV_VAR;
+	envVars[3] = SCRIPT_ENV_VAR;
 	res = verifyEnvironmentSettings(envVars, NR_ENV_VARS);
 	if (res < 0) {
 		exit(1);
@@ -79,7 +80,7 @@ int main(int argc, char *argv[]) {
 
 	snprintf(kStr, K_STR_LEN, "%d", k);
 	snprintf(mStr, M_STR_LEN, "%d", m);
-	res = pthread_mutex_init(&mutex, NULL);
+	res = pthread_mutex_init(&mux, NULL);
 	if (res != 0) {
 		perror("pthread_mutex_init");
 		exit(1);
@@ -97,7 +98,7 @@ int main(int argc, char *argv[]) {
 	context = libwebsocket_create_context(&info);
 	if (context == NULL) {
 		fprintf(stderr, "libwebsocket init failed\n");
-		pthread_mutex_destroy(&mutex);
+		pthread_mutex_destroy(&mux);
 		return EXIT_FAILURE;
 	}
 
@@ -105,7 +106,7 @@ int main(int argc, char *argv[]) {
 		libwebsocket_service(context, 500);
 	}
 	printf("stopping server...\n");
-	pthread_mutex_destroy(&mutex);
+	pthread_mutex_destroy(&mux);
 	libwebsocket_context_destroy(context);
 	return EXIT_SUCCESS;
 }

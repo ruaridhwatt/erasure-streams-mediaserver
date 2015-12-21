@@ -20,10 +20,12 @@ void removeMp4(char *fileName) {
 	}
 }
 
-void receiveFile(void *in, size_t len, struct upload_user *user) {
+int receiveFile(void *in, size_t len, struct upload_user *user) {
+	int res;
 	FILE *received_file;
 	unsigned char pseudoTerm;
 
+	res = 0;
 	if (len == 1 && *((unsigned char *) in) == 0) {
 		if (user->terminatorReceived == true) {
 			/* Second terminator received */
@@ -32,27 +34,29 @@ void receiveFile(void *in, size_t len, struct upload_user *user) {
 			user->terminatorReceived = false;
 			user->uploadComplete = true;
 			/* TODO start distribution */
+
+		} else {
+			user->terminatorReceived = true;
 		}
-		user->terminatorReceived = true;
 	} else {
 		printf("%d\n", (int) len);
 		received_file = fopen(user->mp4Dir, "a+b");
 
 		if (received_file == NULL) {
 			fprintf(stderr, "Failed to open file %s\n", user->filename);
-			exit(EXIT_FAILURE);
+			res = -1;
+		} else {
+			if (user->terminatorReceived == true) {
+				user->terminatorReceived = false;
+				/* Write terminator that wasn't! */
+				pseudoTerm = 0;
+				fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
+			}
+			fwrite(in, sizeof(unsigned char), len, received_file);
+			fclose(received_file);
 		}
-
-		if (user->terminatorReceived == true) {
-			user->terminatorReceived = false;
-			/* Write terminator that wasn't! */
-			pseudoTerm = 0;
-			fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
-		}
-
-		fwrite(in, sizeof(unsigned char), len, received_file);
-		fclose(received_file);
 	}
+	return res;
 }
 
 void *initBentoFragmention(void *filename) {
@@ -182,16 +186,16 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 					free(thisUser->dir);
 					free(thisUser->dotDir);
 					free(thisUser->mp4Dir);
-					buff = (unsigned char *) malloc(paddingSize + 3);
-					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "NOK", 3);
+					buff = (unsigned char *) malloc(paddingSize + 4);
+					strcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "NOK");
 					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 3, LWS_WRITE_TEXT);
 					free(buff);
 
 				} else {
 					thisUser->grantedUpload = true;
 					thisUser->uploadComplete = false;
-					buff = (unsigned char *) malloc(paddingSize + 2);
-					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "OK", 2);
+					buff = (unsigned char *) malloc(paddingSize + 3);
+					strcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "OK");
 					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 2, LWS_WRITE_TEXT);
 					free(buff);
 				}
