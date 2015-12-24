@@ -244,7 +244,7 @@ FILE *prepUpload(char *filename) {
 
 int startFragmentation(char *filename) {
 	int res;
-	char *uploadDir, *filePath, *pos;
+	char *uploadDir, *filePath;
 	pthread_t detatchedWorker;
 	pthread_attr_t attr;
 
@@ -257,13 +257,10 @@ int startFragmentation(char *filename) {
 		free(uploadDir);
 		return -1;
 	}
-	pos = filePath;
-	strncpy(pos, uploadDir, strlen(uploadDir));
-	pos += strlen(uploadDir);
+	strcpy(filePath, uploadDir);
 	free(uploadDir);
-	strncpy(pos, filename, strlen(filename));
-	pos += strlen(filename);
-	*pos = '\0';
+	strcat(filePath, filename);
+	free(filename);
 
 	res = pthread_attr_init(&attr);
 	if (res != 0) {
@@ -282,6 +279,31 @@ int startFragmentation(char *filename) {
 		free(filePath);
 		return -1;
 	}
+	return 0;
+}
+
+int freeUncomletedUpload(char *filename) {
+	int res;
+	char *uploadDir, *command;
+
+	uploadDir = __getUploadDirPath(filename);
+	if (uploadDir == NULL) {
+		return -1;
+	}
+
+	command = (char *) malloc((strlen(REMOVE_COMMAND) + strlen(uploadDir)) * sizeof(char));
+	if (command == NULL) {
+		free(uploadDir);
+		return -1;
+	}
+	strcpy(command, REMOVE_COMMAND);
+	strcat(command, uploadDir);
+	free(uploadDir);
+	pthread_mutex_lock(&mux);
+	res = system(command);
+	pthread_mutex_unlock(&mux);
+	free(command);
+	return res;
 }
 
 void *__fragmentation_worker(void *filePath) {
@@ -325,9 +347,7 @@ void *__fragmentation_worker(void *filePath) {
 	}
 
 	if (res != 0) {
-		pos = strrchr(filePath, '/');
-		*pos = '\0';
-		strcpy(command, "rm -R ");
+		strcpy(command, REMOVE_COMMAND);
 		strcat(command, filePath);
 		pthread_mutex_lock(&mux);
 		system(command);

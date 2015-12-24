@@ -4,25 +4,13 @@
 #include <stdbool.h>
 #include <libwebsockets.h>
 
-
-#define START_UPLOAD "upl"
-#define BENTOSCRIPT "./scripts/BentoHandleScript.sh "
+#define ACK "OK"
+#define NACK "NOK"
 
 struct upload_user {
-	bool grantedUpload;
-	bool terminatorReceived;
-	bool uploadComplete;
 	char *filename;
-	char *dir;
-	char *dotDir;
-	char *mp4Dir;
+	FILE *f;
 };
-
-typedef enum {
-	UPL = 1, UNKNOWN = 0
-} UPL_CMDS;
-
-
 
 char *appendString(char *s1, char *s2);
 void removeMp4(char *fileName);

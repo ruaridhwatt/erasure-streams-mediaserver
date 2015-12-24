@@ -15,6 +15,7 @@
 #define NR_ENV_VARS 3
 
 #define FRAG_SCRIPT "fragcodeMp4.sh"
+#define REMOVE_COMMAND "rm -R "
 
 #define MAX_SEND_SIZE 1024 * 1024
 
