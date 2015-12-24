@@ -28,7 +28,7 @@
 #define DATA_DIR_SIZE 4
 
 #define MAX_VIDEO_NAME_LENGTH 64
-#define FILENAME_REGEX "^[\w]+[\w.-]+[\w]+$"
+#define FILENAME_REGEX "^[\\w]+[\\w.-]+[\\w]+$"
 
 #define SWITCH_SERVER_KW "switch-server"
 #define NOK_KW "NOK"
@@ -66,6 +66,14 @@ unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track t, enum Se
 unsigned char *getInfoFile(char *videoName, char *filename, size_t *size);
 
 FILE *prepUpload(char *filename);
+
+int startFragmentation(char *filename);
+
+int freeIncompleteUpload(char *filename);
+
+void *__fragmentation_worker(void *filePath);
+
+char *__toStreamPath(char *uploadPath);
 
 char *__getUploadDirPath(char *filename);
 

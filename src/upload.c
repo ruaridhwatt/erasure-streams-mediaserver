@@ -9,29 +9,28 @@
 const int nrUploadCommands = 2;
 const char *uploadCommandStr[] = { "upl", "fin" };
 
-typedef enum {
+enum UploadCommand {
 	INITIALIZE_UPLOAD = 0, UPLOAD_FINNISHED = 1, UNKNOWN = 2
-} UPL_CMDS;
+};
 
-UPL_CMDS getUPLCommand(char *in) {
+enum UploadCommand getUploadCommand(char *in) {
 
 	int i;
-	for (i = 0; i < nrInfoCommands; i++) {
-		if (strcmp(in, infoCommandStr[i]) == 0) {
+	for (i = 0; i < nrUploadCommands; i++) {
+		if (strcmp(in, uploadCommandStr[i]) == 0) {
 			break;
 		}
 	}
-	return (UPL_CMDS) i;
+	return (enum UploadCommand) i;
 }
 
 int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
 		size_t len) {
 
 	struct upload_user *thisUser = (struct upload_user *) user;
-	UPL_CMDS c;
+	enum UploadCommand c;
 	char *inStr, *commandStr, *filename;
 	size_t written;
-	unsigned char *response;
 	int res;
 
 	res = 0;
@@ -50,7 +49,7 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 			}
 			written = fwrite(in, sizeof(unsigned char), len, thisUser->f);
 			if (written != len) {
-				freeUncompletedUpload(thisUser->filename);
+				freeIncompleteUpload(thisUser->filename);
 				res = -1;
 			}
 		} else {
@@ -61,7 +60,7 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 				break;
 			}
 			commandStr = strtok(in, "\t");
-			c = getUPLCommand(commandStr);
+			c = getUploadCommand(commandStr);
 			switch (c) {
 			case INITIALIZE_UPLOAD:
 				filename = strtok(NULL, "\t");
@@ -79,7 +78,7 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 					fclose(thisUser->f);
 					res = startFragmentation(thisUser->filename);
 					if (res != 0) {
-						freeUncompletedUpload(thisUser->filename);
+						freeIncompleteUpload(thisUser->filename);
 					}
 				} else {
 					res = -1;
@@ -97,7 +96,7 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 			fclose(thisUser->f);
 		}
 		if (thisUser->filename != NULL) {
-			freeUncompletedUpload(thisUser->filename);
+			freeIncompleteUpload(thisUser->filename);
 		}
 		printf("Connection Closed\n");
 		break;
@@ -110,7 +109,7 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 			fclose(thisUser->f);
 		}
 		if (thisUser->filename != NULL) {
-			freeUncompletedUpload(thisUser->filename);
+			freeIncompleteUpload(thisUser->filename);
 		}
 	}
 	return res;
@@ -118,16 +117,16 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 
 int send(char *string, struct libwebsocket *wsi) {
 	int bufsize, res;
-	unsigned char *buf;
+	char *buf;
 
 	bufsize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
 	bufsize += strlen(string) + 1;
-	buf = (unsigned char *) malloc(bufsize * sizeof(unsigned char));
+	buf = (char *) malloc(bufsize * sizeof(char));
 	if (buf == NULL) {
 		return -1;
 	}
 	strcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], string);
-	res = libwebsocket_write(wsi, buf, strlen(string), LWS_WRITE_TEXT);
+	res = libwebsocket_write(wsi, (unsigned char *) buf, strlen(string), LWS_WRITE_TEXT);
 	free(buf);
 	return res;
 }

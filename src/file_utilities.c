@@ -195,11 +195,10 @@ unsigned char *getInfoFile(char *videoName, char *filename, size_t *size) {
 }
 
 FILE *prepUpload(char *filename) {
-	int i;
 	char *uploadDir, *streamDir, *pos, *filePath;
 	FILE *f;
 
-	uploadDir = getUploadDirPath(filename);
+	uploadDir = __getUploadDirPath(filename);
 	if (uploadDir == NULL) {
 		return NULL;
 	}
@@ -248,7 +247,7 @@ int startFragmentation(char *filename) {
 	pthread_t detatchedWorker;
 	pthread_attr_t attr;
 
-	uploadDir = getUploadDirPath(filename);
+	uploadDir = __getUploadDirPath(filename);
 	if (uploadDir == NULL) {
 		return -1;
 	}
@@ -282,7 +281,7 @@ int startFragmentation(char *filename) {
 	return 0;
 }
 
-int freeUncomletedUpload(char *filename) {
+int freeIncompleteUpload(char *filename) {
 	int res;
 	char *uploadDir, *command;
 
@@ -381,7 +380,7 @@ char *__getUploadDirPath(char *filename) {
 	int res;
 	char *videoHome, *subdir, *filepath, *pos;
 
-	res = validateUploadFilename(filename);
+	res = __validateUploadFilename(filename);
 	if (res != 0) {
 		return NULL;
 	}
@@ -389,7 +388,7 @@ char *__getUploadDirPath(char *filename) {
 	if (videoHome == NULL) {
 		return NULL;
 	}
-	subdir = getUploadDirName(filename);
+	subdir = __getUploadDirName(filename);
 	if (subdir == NULL) {
 		return NULL;
 	}
@@ -444,6 +443,6 @@ int __validateUploadFilename(char *filename) {
 		return -1;
 	}
 	res = regexec(&regex, filename, 0, NULL, 0);
-	regfree(regex);
+	regfree(&regex);
 	return res;
 }
