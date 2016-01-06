@@ -6,14 +6,18 @@ then
 	exit 1
 fi
 
-filename=´basename $1´
-directory=´dirname $1´  
+command=$(basename "$1")
+filename=$command
+
+command=$(dirname "$1")
+directory=$command
 
 if ! cd $directory; then
 	exit 1
 fi
 
-bentoFragmentString=$BENTO4_HOME"bin/mp4fragment "filename" frag.mp4 --fragment-duration 86400000"
+bentoFragmentString=$BENTO4_HOME"bin/mp4fragment "$filename" frag.mp4 --fragment-duration 86400000"
+echo $bentoFragmentString
 if ! $bentoFragmentString; then
 	exit 1
 fi

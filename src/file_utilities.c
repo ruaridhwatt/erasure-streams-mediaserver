@@ -199,11 +199,13 @@ FILE *prepUpload(char *filename) {
 	FILE *f;
 
 	uploadDir = __getUploadDirPath(filename);
+	fprintf(stderr, "UploadDir: %s\n", uploadDir);
 	if (uploadDir == NULL) {
 		return NULL;
 	}
 
 	streamDir = __toStreamPath(uploadDir);
+	fprintf(stderr, "StreamDir: %s\n", streamDir);
 	if (streamDir == NULL) {
 		free(uploadDir);
 		return NULL;
@@ -212,6 +214,7 @@ FILE *prepUpload(char *filename) {
 	pthread_mutex_lock(&mux);
 	if (access(streamDir, F_OK) == 0 || access(uploadDir, F_OK) == 0) {
 		/* video exists */
+		fprintf(stderr, "Already exists\n");
 		pthread_mutex_unlock(&mux);
 		free(uploadDir);
 		free(streamDir);
@@ -305,16 +308,19 @@ int freeIncompleteUpload(char *filename) {
 	return res;
 }
 
-void *__fragmentation_worker(void *filePath) {
+void *__fragmentation_worker(void *in) {
 	int commandLen, res;
-	char *scriptDir, *command, *pos, *streamDir;
+	char *scriptDir, *command, *pos, *streamDir, *filePath;
+
+	filePath = (char *) in;
 
 	scriptDir = getenv(SCRIPT_ENV_VAR);
 
 	commandLen = strlen(scriptDir);
-	commandLen += strlen(FRAG_SCRIPT) + 1;
-	commandLen += strlen(kStr) + 1;
-	commandLen += strlen(mStr) + 1;
+	commandLen += (strlen(FRAG_SCRIPT) + 1);
+	commandLen += (strlen(filePath) + 1);
+	commandLen += (strlen(kStr) + 1);
+	commandLen += (strlen(mStr) + 1);
 
 	command = (char *) malloc(commandLen * sizeof(char));
 	if (command == NULL) {
@@ -339,6 +345,7 @@ void *__fragmentation_worker(void *filePath) {
 			res = -1;
 		} else {
 			pthread_mutex_lock(&mux);
+			fprintf(stderr, "%s -> %s\n", filePath, streamDir);
 			res = rename(filePath, streamDir);
 			pthread_mutex_unlock(&mux);
 			free(streamDir);
@@ -369,10 +376,10 @@ char *__toStreamPath(char *uploadPath) {
 	if (pos == NULL) {
 		return NULL;
 	}
-	i = uploadPath - pos;
+	i = pos - uploadPath;
 	strncpy(streamPath, uploadPath, i);
 	pos++;
-	strcpy(streamPath, pos);
+	strcpy(&streamPath[i], pos);
 	return streamPath;
 }
 
@@ -381,6 +388,7 @@ char *__getUploadDirPath(char *filename) {
 	char *videoHome, *subdir, *filepath, *pos;
 
 	res = __validateUploadFilename(filename);
+	fprintf(stderr, "valid filename? %s\n", res == 0 ? "Yes" : "No");
 	if (res != 0) {
 		return NULL;
 	}
@@ -425,18 +433,13 @@ char *__getUploadDirName(char *filename) {
 	dir = (char *) malloc((1 + i + 1) * sizeof(char));
 	dir[0] = '.';
 	strncpy(&dir[1], filename, i);
-	dir[i] = '\0';
+	dir[i + 1] = '\0';
 	return dir;
 }
 
 int __validateUploadFilename(char *filename) {
 	int res;
 	regex_t regex;
-
-	res = strlen(filename);
-	if (res <= 0 || res > MAX_VIDEO_NAME_LENGTH) {
-		return -1;
-	}
 
 	res = regcomp(&regex, FILENAME_REGEX, 0);
 	if (res != 0) {

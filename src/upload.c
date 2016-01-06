@@ -64,21 +64,28 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 			switch (c) {
 			case INITIALIZE_UPLOAD:
 				filename = strtok(NULL, "\t");
+				fprintf(stderr, "Filename: %s\n", filename);
 				thisUser->f = prepUpload(filename);
 				if (thisUser->f == NULL) {
-					send(NACK, wsi);
+					send_text(NACK_KW, wsi);
 					break;
 				}
-				thisUser->filename = (char *) malloc(strlen(filename) * sizeof(char));
+				thisUser->filename = (char *) malloc((strlen(filename) + 1) * sizeof(char));
 				strcpy(thisUser->filename, filename);
-				send(ACK, wsi);
+				send_text(ACK_KW, wsi);
 				break;
 			case UPLOAD_FINNISHED:
 				if (thisUser->f != NULL) {
-					fclose(thisUser->f);
-					res = startFragmentation(thisUser->filename);
-					if (res != 0) {
-						freeIncompleteUpload(thisUser->filename);
+					if (thisUser->f != NULL) {
+						fclose(thisUser->f);
+						thisUser->f = NULL;
+					}
+					if (thisUser->filename != NULL) {
+						res = startFragmentation(thisUser->filename);
+						if (res != 0) {
+							freeIncompleteUpload(thisUser->filename);
+						}
+						thisUser->filename = NULL;
 					}
 				} else {
 					res = -1;
@@ -94,9 +101,11 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 	case LWS_CALLBACK_CLOSED:
 		if (thisUser->f != NULL) {
 			fclose(thisUser->f);
+			thisUser->f = NULL;
 		}
 		if (thisUser->filename != NULL) {
 			freeIncompleteUpload(thisUser->filename);
+			thisUser->filename = NULL;
 		}
 		printf("Connection Closed\n");
 		break;
@@ -107,15 +116,17 @@ int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi,
 	if (res != 0) {
 		if (thisUser->f != NULL) {
 			fclose(thisUser->f);
+			thisUser->f = NULL;
 		}
 		if (thisUser->filename != NULL) {
 			freeIncompleteUpload(thisUser->filename);
+			thisUser->filename = NULL;
 		}
 	}
 	return res;
 }
 
-int send(char *string, struct libwebsocket *wsi) {
+int send_text(char *string, struct libwebsocket *wsi) {
 	int bufsize, res;
 	char *buf;
 
@@ -126,7 +137,7 @@ int send(char *string, struct libwebsocket *wsi) {
 		return -1;
 	}
 	strcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], string);
-	res = libwebsocket_write(wsi, (unsigned char *) buf, strlen(string), LWS_WRITE_TEXT);
+	res = libwebsocket_write(wsi, (unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING], strlen(string), LWS_WRITE_TEXT);
 	free(buf);
 	return res;
 }

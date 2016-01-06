@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <libwebsockets.h>
 
-#define ACK "OK"
-#define NACK "NOK"
 
 struct upload_user {
 	char *filename;
@@ -14,6 +12,7 @@ struct upload_user {
 
 int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
 		size_t len);
-int send(char *string, struct libwebsocket *wsi);
+
+int send_text(char *string, struct libwebsocket *wsi);
 
 #endif /* UPLOAD_H_ */

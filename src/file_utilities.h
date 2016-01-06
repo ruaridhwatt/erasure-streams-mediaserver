@@ -27,11 +27,11 @@
 #define VIDEO_DIR "venc"
 #define DATA_DIR_SIZE 4
 
-#define MAX_VIDEO_NAME_LENGTH 64
-#define FILENAME_REGEX "^[\\w]+[\\w.-]+[\\w]+$"
+#define FILENAME_REGEX "^[a-zA-Z_.0-9]\\{1,64\\}$"
 
 #define SWITCH_SERVER_KW "switch-server"
-#define NOK_KW "NOK"
+#define ACK_KW "OK"
+#define NACK_KW "NOK"
 
 #define VIDEO_LIST_KW "video-list"
 #define MPD_KW "mpd-file"
