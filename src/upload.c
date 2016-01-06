@@ -3,213 +3,141 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include "file_utilities.h"
 #include "upload.h"
 
-char *appendString(char *s1, char *s2) {
-	char *s3 = (char *) malloc((strlen(s1) + strlen(s2) + 2) * sizeof(char));
-	strcpy(s3, s1);
-	strcat(s3, s2);
-	return s3;
-}
+const int nrUploadCommands = 2;
+const char *uploadCommandStr[] = { "upl", "fin" };
 
-void removeMp4(char *fileName) {
-	char *pos;
-	pos = index(fileName, '.');
-	if (pos != NULL) {
-		*pos = '\0';
-	}
-}
+enum UploadCommand {
+	INITIALIZE_UPLOAD = 0, UPLOAD_FINNISHED = 1, UNKNOWN = 2
+};
 
-void receiveFile(void *in, size_t len, struct upload_user *user) {
-	FILE *received_file;
-	unsigned char pseudoTerm;
+enum UploadCommand getUploadCommand(char *in) {
 
-	if (len == 1 && *((unsigned char *) in) == 0) {
-		if (user->terminatorReceived == true) {
-			/* Second terminator received */
-			printf("Upload done!\n");
-			user->grantedUpload = false;
-			user->terminatorReceived = false;
-			user->uploadComplete = true;
-			/* TODO start distribution */
+	int i;
+	for (i = 0; i < nrUploadCommands; i++) {
+		if (strcmp(in, uploadCommandStr[i]) == 0) {
+			break;
 		}
-		user->terminatorReceived = true;
-	} else {
-		printf("%d\n", (int) len);
-		received_file = fopen(user->mp4Dir, "a+b");
-
-		if (received_file == NULL) {
-			fprintf(stderr, "Failed to open file %s\n", user->filename);
-			exit(EXIT_FAILURE);
-		}
-
-		if (user->terminatorReceived == true) {
-			user->terminatorReceived = false;
-			/* Write terminator that wasn't! */
-			pseudoTerm = 0;
-			fwrite(&pseudoTerm, sizeof(unsigned char), 1, received_file);
-		}
-
-		fwrite(in, sizeof(unsigned char), len, received_file);
-		fclose(received_file);
 	}
-}
-
-void *initBentoFragmention(void *filename) {
-	int res;
-	char *bentoCmd, *pos;
-
-	fprintf(stderr, "bento Filename: \n%s\n", (char *) filename);
-
-	bentoCmd = (char *) malloc(strlen(BENTOSCRIPT) + 1 + strlen(filename) + 1 + strlen(kStr) + 1 + strlen(mStr) + 1);
-	if (bentoCmd == NULL) {
-		return NULL;
-	}
-
-	pos = bentoCmd;
-	strcpy(pos, BENTOSCRIPT);
-	pos += strlen(BENTOSCRIPT);
-	*pos = ' ';
-	pos++;
-	strcpy(pos, filename);
-	pos += strlen(filename);
-	free(filename);
-	*pos = ' ';
-	pos++;
-	strcpy(pos, kStr);
-	pos += strlen(kStr);
-	*pos = ' ';
-	pos++;
-	strcpy(pos, mStr);
-	pos += strlen(mStr);
-	*pos = '\0';
-
-	fprintf(stderr, "bentoCmd: %s\n", bentoCmd);
-	res = system(bentoCmd);
-	free(bentoCmd);
-	if (res < 0) {
-		fprintf(stderr, "Failed to fragment uploaded video\n");
-	}
-	return NULL;
-}
-
-void uploadComplete(struct upload_user *thisUser) {
-	pthread_t thread;
-	char *fileName;
-	int res;
-
-	fileName = (char *) malloc((strlen(thisUser->filename) + 1) * sizeof(char));
-	strcpy(fileName, thisUser->filename);
-
-	res = pthread_create(&thread, NULL, initBentoFragmention, fileName);
-	if (res != 0) {
-		/* Don't stop! People can still stream iaf */
-		perror("pthread_create");
-	}
-	thisUser->uploadComplete = false;
-	free(thisUser->filename);
-	free(thisUser->dir);
-	free(thisUser->dotDir);
-	free(thisUser->mp4Dir);
-}
-
-UPL_CMDS getUPLCommand(char *in) {
-
-	if (strcmp(START_UPLOAD, in) == 0) {
-		return UPL;
-	}
-	return UNKNOWN;
+	return (enum UploadCommand) i;
 }
 
 int callback_upload(struct libwebsocket_context * ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
 		size_t len) {
 
 	struct upload_user *thisUser = (struct upload_user *) user;
-	UPL_CMDS c;
-	char *videoDir, *filename, *pos, *temp;
-	int paddingSize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
-	unsigned char *buff;
+	enum UploadCommand c;
+	char *inStr, *commandStr, *filename;
+	size_t written;
 	int res;
 
 	res = 0;
 	switch (reason) {
 
 	case LWS_CALLBACK_ESTABLISHED:
-		printf("Connection upload established\n");
-		thisUser->grantedUpload = false;
-		thisUser->terminatorReceived = false;
-		thisUser->uploadComplete = false;
+		thisUser->f = NULL;
+		thisUser->filename = NULL;
 		break;
 
 	case LWS_CALLBACK_RECEIVE:
-		if (lws_frame_is_binary(wsi) && thisUser->grantedUpload) {
-			receiveFile(in, len, thisUser);
-			if (thisUser->uploadComplete) {
-				uploadComplete(thisUser);
+		if (lws_frame_is_binary(wsi)) {
+			if (thisUser->f == NULL) {
+				res = -1;
+				break;
 			}
-		} else if (!lws_frame_is_binary(wsi)) {
-			c = getUPLCommand(strtok(in, "\t"));
-			videoDir = getenv("VIDEO_DIR");
-
+			written = fwrite(in, sizeof(unsigned char), len, thisUser->f);
+			if (written != len) {
+				freeIncompleteUpload(thisUser->filename);
+				res = -1;
+			}
+		} else {
+			inStr = (char *) in;
+			if (inStr[len] != '\0') {
+				fprintf(stderr, "Non null terminated string received!");
+				res = -1;
+				break;
+			}
+			commandStr = strtok(in, "\t");
+			c = getUploadCommand(commandStr);
 			switch (c) {
-			case UPL:
+			case INITIALIZE_UPLOAD:
 				filename = strtok(NULL, "\t");
-				fprintf(stderr, "%s\n", filename);
+				fprintf(stderr, "Filename: %s\n", filename);
+				thisUser->f = prepUpload(filename);
+				if (thisUser->f == NULL) {
+					send_text(NACK_KW, wsi);
+					break;
+				}
 				thisUser->filename = (char *) malloc((strlen(filename) + 1) * sizeof(char));
 				strcpy(thisUser->filename, filename);
-
-				pos = index(filename, '.');
-				if (pos != NULL) {
-					*pos = '\0';
-				}
-				thisUser->dir = appendString(videoDir, thisUser->filename);
-				fprintf(stderr, "%s\n", thisUser->dir);
-
-				temp = appendString(".", filename);
-				thisUser->dotDir = appendString(videoDir, temp);
-				free(temp);
-				fprintf(stderr, "%s\n", thisUser->dotDir);
-
-				temp = appendString(thisUser->dotDir, "/");
-				thisUser->mp4Dir = appendString(temp, thisUser->filename);
-				free(temp);
-				fprintf(stderr, "%s\n", thisUser->mp4Dir);
-
-				if ((access(thisUser->dir, F_OK) != -1) || (access(thisUser->dotDir, F_OK) != -1)
-						|| (mkdir(thisUser->dotDir, S_IRWXU | S_IRWXG) < 0)) {
-
-					free(thisUser->filename);
-					free(thisUser->dir);
-					free(thisUser->dotDir);
-					free(thisUser->mp4Dir);
-					buff = (unsigned char *) malloc(paddingSize + 3);
-					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "NOK", 3);
-					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 3, LWS_WRITE_TEXT);
-					free(buff);
-
+				send_text(ACK_KW, wsi);
+				break;
+			case UPLOAD_FINNISHED:
+				if (thisUser->f != NULL) {
+					if (thisUser->f != NULL) {
+						fclose(thisUser->f);
+						thisUser->f = NULL;
+					}
+					if (thisUser->filename != NULL) {
+						res = startFragmentation(thisUser->filename);
+						if (res != 0) {
+							freeIncompleteUpload(thisUser->filename);
+						}
+						thisUser->filename = NULL;
+					}
 				} else {
-					thisUser->grantedUpload = true;
-					thisUser->uploadComplete = false;
-					buff = (unsigned char *) malloc(paddingSize + 2);
-					memcpy(&(buff[LWS_SEND_BUFFER_PRE_PADDING]), "OK", 2);
-					res = libwebsocket_write(wsi, &buff[LWS_SEND_BUFFER_PRE_PADDING], 2, LWS_WRITE_TEXT);
-					free(buff);
-				}
-				if (res < 0) {
-					fprintf(stderr, "Failed to send message!\n");
+					res = -1;
 				}
 				break;
 			default:
-				fprintf(stderr, "Unknown command received");
+				fprintf(stderr, "Unknown command received: %s", commandStr);
+				res = -1;
 				break;
 			}
 		}
 		break;
 	case LWS_CALLBACK_CLOSED:
+		if (thisUser->f != NULL) {
+			fclose(thisUser->f);
+			thisUser->f = NULL;
+		}
+		if (thisUser->filename != NULL) {
+			freeIncompleteUpload(thisUser->filename);
+			thisUser->filename = NULL;
+		}
 		printf("Connection Closed\n");
 		break;
 	default:
 		break;
 	}
+
+	if (res != 0) {
+		if (thisUser->f != NULL) {
+			fclose(thisUser->f);
+			thisUser->f = NULL;
+		}
+		if (thisUser->filename != NULL) {
+			freeIncompleteUpload(thisUser->filename);
+			thisUser->filename = NULL;
+		}
+	}
+	return res;
+}
+
+int send_text(char *string, struct libwebsocket *wsi) {
+	int bufsize, res;
+	char *buf;
+
+	bufsize = LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
+	bufsize += strlen(string) + 1;
+	buf = (char *) malloc(bufsize * sizeof(char));
+	if (buf == NULL) {
+		return -1;
+	}
+	strcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], string);
+	res = libwebsocket_write(wsi, (unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING], strlen(string), LWS_WRITE_TEXT);
+	free(buf);
 	return res;
 }
