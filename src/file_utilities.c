@@ -12,6 +12,8 @@
 #include <regex.h>
 #include <libwebsockets.h>
 #include <pthread.h>
+#include <limits.h>
+#include <errno.h>
 #include "file_utilities.h"
 
 unsigned char *getVideoList(size_t *size) {
@@ -306,6 +308,26 @@ int freeIncompleteUpload(char *filename) {
 	pthread_mutex_unlock(&mux);
 	free(command);
 	return res;
+}
+
+
+int str2int(char *str, int *i) {
+	long l;
+	char *pEnd;
+	if (str == NULL) {
+		return -1;
+	}
+	errno = 0;
+	l = strtol(str, &pEnd, 10);
+	if (pEnd == str || *pEnd != '\0' || errno == ERANGE) {
+		return -1;
+	}
+	if (l > INT_MAX || l < INT_MIN) {
+		errno = ERANGE;
+		return -1;
+	}
+	*i = (int) l;
+	return 0;
 }
 
 void *__fragmentation_worker(void *in) {

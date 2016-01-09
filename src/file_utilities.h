@@ -71,6 +71,8 @@ int startFragmentation(char *filename);
 
 int freeIncompleteUpload(char *filename);
 
+int str2int(char *str, int *i);
+
 void *__fragmentation_worker(void *filePath);
 
 char *__toStreamPath(char *uploadPath);

@@ -12,8 +12,6 @@ int verifyEnvironmentSettings(char **envVars, size_t nrVars);
 
 void sighandler(int sig);
 
-int str2int(char *str, int *i);
-
 void print_usage(char *prog);
 
 #endif /* ERASURE_SERVER_H_ */
