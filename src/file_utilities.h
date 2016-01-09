@@ -39,6 +39,8 @@
 #define K_STR_LEN 4
 #define M_STR_LEN 4
 
+static volatile int force_exit = 0;
+
 char kStr[K_STR_LEN];
 char mStr[M_STR_LEN];
 

@@ -28,8 +28,6 @@ static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload
 		"video", callback_video, sizeof(struct toSend), 0 }, { "intern", callback_intern, sizeof(struct peer), 0 }, {
 NULL, NULL, 0 } };
 
-static volatile int force_exit = 0;
-
 int main(int argc, char *argv[]) {
 	int res, c, nsPort;
 	char *nameServer;
