@@ -38,7 +38,7 @@ unsigned char *getVideoList(size_t *size) {
 	}
 	rewinddir(dir);
 
-	videoList = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + (*size * sizeof(char *)) + LWS_SEND_BUFFER_POST_PADDING);
+	videoList = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + ((*size + 1) * sizeof(char *)) + LWS_SEND_BUFFER_POST_PADDING);
 	if (videoList == NULL) {
 		pthread_mutex_unlock(&mux);
 		closedir(dir);
@@ -56,6 +56,7 @@ unsigned char *getVideoList(size_t *size) {
 			pos += strlen(entry->d_name);
 		}
 	}
+	*pos = '\0';
 	pthread_mutex_unlock(&mux);
 	closedir(dir);
 	return (unsigned char *) videoList;

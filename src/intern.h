@@ -11,7 +11,6 @@
 #include <libwebsockets.h>
 
 #define MY_PORT_FOLLOWS_KW "prt"
-#define GET_PEER_LIST_KW "lst"
 
 #define PORT_STR_LEN 6
 #define PEER_ARRAY_INITIAL_SIZE 20
@@ -20,9 +19,7 @@ int myPort;
 char myPortStr[PORT_STR_LEN];
 int myId;
 
-struct peer {
-	struct libwebsocket *wsi;
-};
+struct libwebsocket **peerArr;
 
 int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len);
@@ -33,8 +30,10 @@ int parseInitVars();
 
 int getPeerList(struct libwebsocket *wsi);
 
-struct peer *getPeer(char *peerStr, struct libwebsocket_context *ctx);
+int connectToPeer(char *peerStr, struct libwebsocket_context *ctx);
 
-int addPeer(struct peer *p, struct peer **peerArr, size_t *index, size_t *peerArrSize);
+int addPeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *index, size_t *peerArrSize);
+
+void removePeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *nrPeers);
 
 #endif /* SRC_INTERN_H_ */
