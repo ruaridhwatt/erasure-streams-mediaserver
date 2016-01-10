@@ -11,24 +11,28 @@
 #include "file_utilities.h"
 #include "intern.h"
 
-const int nrInternCommands = 15;
-const char *internCommandStr[] = { "gsp", "gmp", "gin", "gda", "gco", "psp", "pmp", "pin", "pda", "pco", "pre", "pro",
-		"acr", "acd", "ini", "lst" };
+peer **peerArr = NULL;
+size_t peerArrSize = 0;
+size_t nrPeers = 0;
+
+const int nrInternCommands = 17;
+const char *internCommandStr[] = { "gsp", "gmp", "gin", "gda", "gco", "psp", "pmp", "pin", "pda", "pco", "inf", "pre",
+		"pro", "acr", "acd", "ini", "lst" };
 enum InternCommand {
 
 	/* REQUESTS */
 	GET_SPEC = 0, GET_MPD = 1, GET_INI = 2, GET_DATA = 3, GET_CODING = 4,
 
 	/* PREPARES */
-	PUT_SPEC = 5, PUT_MPD = 6, PUT_INI = 7, PUT_DATA = 8, PUT_CODING = 9,
+	PUT_SPEC = 5, PUT_MPD = 6, PUT_INI = 7, PUT_DATA = 8, PUT_CODING = 9, INFO = 10,
 
 	/* PAXOS */
-	PREPARE = 10, PROMISE = 11, ACCEPT_REQUEST = 12, ACCEPTED = 13,
+	PREPARE = 11, PROMISE = 12, ACCEPT_REQUEST = 13, ACCEPTED = 14,
 
 	/* NAMESERVER */
-	INIT_VARS = 14, PEER_LIST = 15,
+	INIT_VARS = 15, PEER_LIST = 16,
 
-	UNKNOWN = 16
+	UNKNOWN = 17
 };
 
 /**
@@ -59,35 +63,21 @@ enum InternCommand getInternCommand(char *command) {
 int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
 
-	static struct libwebsocket *nameServerWsi = NULL;
-	static size_t peerArrSize = 0;
-	static size_t nrPeers = 0;
+	static peer *me = NULL;
 
 	enum InternCommand c;
-	int res;
+	int res, i;
 	char *peerStr;
+	peer *p = (peer *) user;
 
 	res = 0;
 	switch (reason) {
 
 	case LWS_CALLBACK_ESTABLISHED:
-		/* no break */
-	case LWS_CALLBACK_CLIENT_ESTABLISHED:
-		if (nameServerWsi == NULL) {
-			/* Name server connection established */
-			nameServerWsi = wsi;
-		} else {
-			/* PRINT */
-			fprintf(stderr, "Peer connected");
-			/* Connected to peer */
-			res = addPeer(wsi, peerArr, &nrPeers, &peerArrSize);
-			if (res != 0) {
-				fprintf(stderr, "Could not add peer to peer array\n");
-				force_exit = 1;
-			}
-		}
+		fprintf(stderr, "Peer connected\n");
 		break;
-
+	case LWS_CALLBACK_CLIENT_ESTABLISHED:
+		break;
 	case LWS_CALLBACK_RECEIVE:
 		/* no break */
 	case LWS_CALLBACK_CLIENT_RECEIVE:
@@ -101,23 +91,39 @@ int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 				fprintf(stderr, "Could not parse initialization variables (id, k, m) from Name Server\n");
 				force_exit = 1;
 			} else {
+				fprintf(stderr, "ini success\n");
 				res = sendMyPort(wsi);
 			}
 			break;
 		case PEER_LIST:
 			while ((peerStr = strtok(NULL, "\t")) != NULL) {
-				res = connectToPeer(peerStr, ctx);
-				if (res < 0) {
-					fprintf(stderr, "Could not create peer array");
+				p = connectToPeer(peerStr, ctx);
+				if (p == NULL) {
+					fprintf(stderr, "Could not connect to peer\n");
 					force_exit = 1;
-				} else if (res == myId) {
-					res = addPeer(NULL, peerArr, &nrPeers, &peerArrSize);
-					if (res != 0) {
-						fprintf(stderr, "REALOC FAILED\n");
+				}
+				if (p->wsi == NULL) {
+					me = p;
+				}
+				peerArr = addPeer(p, peerArr, &nrPeers, &peerArrSize, &res);
+				if (res != 0) {
+					fprintf(stderr, "Could not create peer array\n");
+					res = -1;
+					force_exit = 1;
+					break;
+				}
+			}
+			if (res == 0) {
+				fprintf(stdout, "Peer network established\n");
+				for (i = 0; i < nrPeers; i++) {
+					if (peerArr[i]->wsi != NULL) {
+						res = libwebsocket_callback_on_writable(ctx, peerArr[i]->wsi);
 					}
 				}
 			}
-			fprintf(stdout, "Peer network established\n");
+			break;
+		case INFO:
+			p = fillPeer(p);
 			break;
 		default:
 			break;
@@ -127,24 +133,65 @@ int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 	case LWS_CALLBACK_SERVER_WRITEABLE:
 		/* no break */
 	case LWS_CALLBACK_CLIENT_WRITEABLE:
+		if (p->sentInfo == 0) {
+			res = sendInfo(me, wsi);
+			if (res != 0) {
+				fprintf(stderr, "Could not send info to peer\n");
+				force_exit = 1;
+			} else {
+				p->sentInfo = 1;
+			}
+		}
 		break;
 
 	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
 		/* no break */
 	case LWS_CALLBACK_CLOSED:
 		fprintf(stderr, "CLOSING\n");
-		//removePeer(wsi, peerArr, &nrPeers);
+		peerArr = removePeer(p, peerArr, &nrPeers);
 		break;
 
 	case LWS_CALLBACK_PROTOCOL_DESTROY:
-		fprintf(stderr, "DESTROYING\n");
-		/* free(peerArr); */
+		fprintf(stderr, "Freeing Peer Array\n");
+		free(peerArr);
 		break;
 	default:
 		break;
 	}
 
 	return res;
+}
+
+int sendInfo(peer *me, struct libwebsocket *wsi) {
+	char *buf;
+	char idStr[6];
+	size_t strSize;
+
+	snprintf(idStr, 6, "%d", me->id);
+	idStr[5] = '\0';
+
+	strSize = strlen(internCommandStr[INFO]) + 1;
+	strSize += strlen(me->host) + 1;
+	strSize += strlen(myPortStr) + 1;
+	strSize += strlen(idStr) + 1;
+
+	buf = malloc(LWS_SEND_BUFFER_PRE_PADDING + (strSize * sizeof(char)) + LWS_SEND_BUFFER_POST_PADDING);
+	strcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], internCommandStr[INFO]);
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], "\t");
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], me->host);
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], ":");
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], myPortStr);
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], ":");
+	strcat(&buf[LWS_SEND_BUFFER_PRE_PADDING], idStr);
+	return libwebsocket_write(wsi, (unsigned char *) &buf[LWS_SEND_BUFFER_PRE_PADDING],
+			strlen(&buf[LWS_SEND_BUFFER_PRE_PADDING]), LWS_WRITE_TEXT);
+}
+
+peer *fillPeer(peer *p) {
+	strcpy(p->host, strtok(NULL, ":"));
+	str2int(strtok(NULL, ":"), &(p->port));
+	str2int(strtok(NULL, ":"), &(p->id));
+	return p;
 }
 
 int sendMyPort(struct libwebsocket *wsi) {
@@ -171,6 +218,7 @@ int parseInitVars() {
 	char *idStr, *k, *m;
 	int res, kVal, mVal;
 	idStr = strtok(NULL, "\t");
+	fprintf(stderr, "%s\n", idStr);
 	if (idStr == NULL) {
 		return -1;
 	}
@@ -179,6 +227,7 @@ int parseInitVars() {
 		return -1;
 	}
 	k = strtok(NULL, "\t");
+	fprintf(stderr, "%s\n", k);
 	if (k == NULL) {
 		return -1;
 	}
@@ -189,6 +238,7 @@ int parseInitVars() {
 		return -1;
 	}
 	m = strtok(NULL, "\t");
+	fprintf(stderr, "%s\n", m);
 	if (m == NULL) {
 		return -1;
 	}
@@ -204,72 +254,111 @@ int parseInitVars() {
 	return 0;
 }
 
-int connectToPeer(char *peerStr, struct libwebsocket_context *ctx) {
+peer *connectToPeer(char *peerStr, struct libwebsocket_context *ctx) {
 	char *peerHost, *peerPortStr, *peerIdStr;
 	int res, peerPort, peerId;
 	struct libwebsocket *wsi;
+	peer *p;
 
+	wsi = NULL;
 	peerHost = peerStr;
 
 	peerPortStr = index(peerStr, ':');
 	*peerPortStr = '\0';
-	if (strlen(peerHost) == 0) {
-		return -1;
+	if (strlen(peerHost) == 0 || strlen(peerHost) >= MAX_HOST_SIZE) {
+		return NULL;
 	}
 	peerPortStr++;
 	peerIdStr = index(peerPortStr, ':');
 	*peerIdStr = '\0';
 	if (strlen(peerPortStr) == 0) {
-		return -1;
+		return NULL;
 	}
 	peerIdStr++;
 
 	res = str2int(peerPortStr, &peerPort);
 	if (res != 0) {
-		return -1;
+		return NULL;
 	}
 	res = str2int(peerIdStr, &peerId);
 	if (res != 0) {
-		return -1;
+		return NULL;
 	}
+
 	/* PRINT */
 	fprintf(stderr, "%s\t%s\t%s\n", peerHost, peerPortStr, peerIdStr);
+
+	p = (peer *) malloc(sizeof(peer));
+	p->sentInfo = 0;
+	p->id = peerId;
+	strcpy(p->host, peerHost);
+	p->port = peerPort;
+
 	if (peerId != myId) {
-		wsi = libwebsocket_client_connect(ctx, peerHost, peerPort, 0, "/", peerHost, "origin", "intern", -1);
+		wsi = libwebsocket_client_connect_extended(ctx, peerHost, peerPort, 0, "/", peerHost, "origin", "intern", -1,
+				p);
 		if (wsi == NULL) {
-			return -1;
+			free(p);
+			return NULL;
 		}
 	}
-	return peerId;
+	p->wsi = wsi;
+	return p;
 }
 
-int addPeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *index, size_t *peerArrSize) {
-	if (*index == *peerArrSize) {
+peer **addPeer(peer *p, peer **peerArr, size_t *nrPeers, size_t *peerArrSize, int *res) {
+	int i;
+	peer **reallocedPeerArr;
+
+	*res = 0;
+	if (*nrPeers == *peerArrSize) {
 		*peerArrSize += PEER_ARRAY_INITIAL_SIZE;
-		fprintf(stderr, "REALOC\n");
-		peerArr = realloc(peerArr, *peerArrSize * sizeof(struct libwebsocket *));
-		if (peerArr == NULL) {
-			return -1;
+		reallocedPeerArr = realloc(peerArr, *peerArrSize * sizeof(peer *));
+		if (reallocedPeerArr == NULL) {
+			*res = -1;
+			return peerArr;
+		} else {
+			peerArr = reallocedPeerArr;
 		}
 	}
-	peerArr[*index] = wsi;
-	(*index)++;
-	fprintf(stderr, "%p", (void *) peerArr[*index - 1]);
-	return 0;
+	peerArr[*nrPeers] = p;
+	(*nrPeers)++;
+
+	/* PRINT */
+	fprintf(stderr, "Added: ");
+	fprintf(stderr, "[%p", (void *) peerArr[0]);
+	for (i = 1; i < *nrPeers; i++) {
+		fprintf(stderr, ", %p", (void *) peerArr[i]);
+	}
+	fprintf(stderr, "]\n");
+
+	return peerArr;
 }
 
-void removePeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *nrPeers) {
+peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers) {
 	int i;
 	for (i = 0; i < *nrPeers; i++) {
-		if (wsi == peerArr[i]) {
+		if (p->id == peerArr[i]->id) {
 			break;
 		}
 	}
 	if (i != *nrPeers) {
-		memmove(&peerArr[i], &peerArr[i + 1], (*nrPeers - i - 1) * sizeof(struct libwebsocket *));
+		memmove(&peerArr[i], &peerArr[i + 1], (*nrPeers - i - 1) * sizeof(peer *));
 		(*nrPeers)--;
 	} else {
-		fprintf(stderr, "Could not remove peer!");
+		fprintf(stderr, "Nameserver closed!\n");
 	}
+
+	/* PRINT */
+	fprintf(stderr, "removed: ");
+	if (*nrPeers != 0) {
+		fprintf(stderr, "[%p", (void *) peerArr[0]);
+	}
+	for (i = 1; i < *nrPeers; i++) {
+		fprintf(stderr, ", %p", (void *) peerArr[i]);
+	}
+	fprintf(stderr, "]\n");
+
+	return peerArr;
 }
 

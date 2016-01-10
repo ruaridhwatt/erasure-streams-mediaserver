@@ -14,26 +14,37 @@
 
 #define PORT_STR_LEN 6
 #define PEER_ARRAY_INITIAL_SIZE 20
+#define MAX_HOST_SIZE 45
+
+typedef struct _peer {
+	int id;
+	char host[MAX_HOST_SIZE];
+	int port;
+	struct libwebsocket *wsi;
+	int sentInfo;
+} peer;
 
 int myPort;
 char myPortStr[PORT_STR_LEN];
 int myId;
-
-struct libwebsocket **peerArr;
 
 int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len);
 
 int sendMyPort(struct libwebsocket *wsi);
 
+int sendInfo(peer *me, struct libwebsocket *wsi);
+
+peer *fillPeer(peer *p);
+
 int parseInitVars();
 
 int getPeerList(struct libwebsocket *wsi);
 
-int connectToPeer(char *peerStr, struct libwebsocket_context *ctx);
+peer *connectToPeer(char *peerStr, struct libwebsocket_context *ctx);
 
-int addPeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *index, size_t *peerArrSize);
+peer **addPeer(peer *p, peer **peerArr, size_t *index, size_t *peerArrSize, int *res);
 
-void removePeer(struct libwebsocket *wsi, struct libwebsocket **peerArr, size_t *nrPeers);
+peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers);
 
 #endif /* SRC_INTERN_H_ */

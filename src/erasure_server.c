@@ -25,7 +25,7 @@
 
 static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), 0 }, {
 		"info", callback_info, sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, {
-		"video", callback_video, sizeof(struct toSend), 0 }, { "intern", callback_intern, 0, 0 }, {
+		"video", callback_video, sizeof(struct toSend), 0 }, { "intern", callback_intern, sizeof(peer), 0 }, {
 NULL, NULL, 0 } };
 
 int main(int argc, char *argv[]) {
@@ -126,7 +126,6 @@ int main(int argc, char *argv[]) {
 	printf("stopping server...\n");
 	free(nameServer);
 	pthread_mutex_destroy(&mux);
-	free(peerArr);
 	libwebsocket_context_destroy(context);
 	return EXIT_SUCCESS;
 }
