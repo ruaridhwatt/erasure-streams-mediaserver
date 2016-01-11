@@ -122,7 +122,7 @@ int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi, 
 				res = sendInfo(me, wsi);
 				break;
 			case PUT_INFO:
-				p = fillPeer(p, &res);
+				p = fillPeer(p, wsi, &res);
 				if (res == 0) {
 					addPeer(p, peerArr, &nrPeers, &peerArrSize, &res);
 				}
@@ -199,7 +199,7 @@ int sendInfo(peer *me, struct libwebsocket *wsi) {
 	return res;
 }
 
-peer *fillPeer(peer *p, int *res) {
+peer *fillPeer(peer *p, struct libwebsocket *wsi, int *res) {
 	int port;
 
 	strcpy(p->host, strtok(NULL, ":"));
@@ -209,6 +209,7 @@ peer *fillPeer(peer *p, int *res) {
 	}
 	p->port = port;
 	*res = str2int(strtok(NULL, ":"), &(p->id));
+	p->wsi = wsi;
 	return p;
 }
 
@@ -340,9 +341,9 @@ peer **addPeer(peer *p, peer **peerArr, size_t *nrPeers, size_t *peerArrSize, in
 
 	/* PRINT */
 	fprintf(stderr, "Added: ");
-	fprintf(stderr, "[%d", peerArr[0]->port);
+	fprintf(stderr, "[%d:%p", peerArr[0]->port, (void *) peerArr[0]->wsi);
 	for (i = 1; i < *nrPeers; i++) {
-		fprintf(stderr, ", %d", peerArr[i]->port);
+		fprintf(stderr, ", %d:%p", peerArr[i]->port, (void *) peerArr[i]->wsi);
 	}
 	fprintf(stderr, "]\n");
 
@@ -409,6 +410,7 @@ char *getRedirect(int segNr) {
 	dest = strcat(dest, p->host);
 	dest = strcat(dest, ":");
 	dest = strcat(dest, portStr);
+	fprintf(stderr, "%s\n", dest);
 
 	return buf;
 }
@@ -425,6 +427,8 @@ peer *getPeer(int segNr, enum SegType type) {
 	if (index >= nrPeers) {
 		index = nrPeers - 1;
 	}
+	fprintf(stderr, "SegNr %d\n", segNr);
+	fprintf(stderr, "Redirecting to ms nr %d wsi address %p\n", index, (void *) peerArr[index]->wsi);
 	return peerArr[index];
 }
 

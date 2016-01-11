@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "file_utilities.h"
+#include "intern.h"
 #include "video.h"
 
 const int nrVideoCommands = 2;
@@ -31,9 +32,9 @@ int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 		size_t len) {
 	enum VideoCommand c;
 	struct toSend *s;
-	int res;
+	int res, segNr;
 	char *videoName;
-	char *segNr;
+	char *segStr;
 
 	switch (reason) {
 	case LWS_CALLBACK_RECEIVE:
@@ -52,13 +53,25 @@ int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 			}
 			break;
 		case GET_DATA_SEG:
-			s->writeMode = LWS_WRITE_BINARY;
 			videoName = strtok(NULL, "\t");
-			segNr = strtok(NULL, "\t");
-			fprintf(stderr, "sending video seg %s\n", segNr);
-			s->data = getEncodedSeg(videoName, segNr, VIDEO, DATA, &s->size);
-			if (s->data == NULL) {
-				fprintf(stderr, "Could not get video seg!\n");
+			segStr = strtok(NULL, "\t");
+			res = str2int(segStr, &segNr);
+
+			if (res == 0) {
+				s->data = getEncodedSeg(videoName, segStr, VIDEO, DATA, &s->size);
+				if (s->data == NULL) {
+					s->data = (unsigned char *) getRedirect(segNr);
+					if (s->data == NULL) {
+						fprintf(stderr, "No such video seg: d%s\n", segStr);
+					} else {
+						s->size = strlen((char *) &s->data[LWS_SEND_BUFFER_PRE_PADDING]);
+						s->writeMode = LWS_WRITE_TEXT;
+						fprintf(stderr, "Redirecting to: %s\n", &s->data[LWS_SEND_BUFFER_PRE_PADDING]);
+					}
+				} else {
+					s->writeMode = LWS_WRITE_BINARY;
+					fprintf(stderr, "sending video seg %s\n", segStr);
+				}
 			}
 			break;
 		default:
@@ -70,7 +83,7 @@ int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 			break;
 		}
 
-		if (s->size < MAX_SEND_SIZE) {
+		if (s->size < RX_BUFFER_SIZE) {
 			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING], s->size, s->writeMode);
 			fprintf(stderr, "send res: %d\n", res);
 			free(s->data);
@@ -88,21 +101,20 @@ int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 		if (s->data == NULL) {
 			break;
 		}
-		if (s->size - s->sent > MAX_SEND_SIZE) {
-			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], MAX_SEND_SIZE, s->writeMode | LWS_WRITE_NO_FIN);
-			fprintf(stderr, "send res: %d\n", res);
+		if (s->size - s->sent > RX_BUFFER_SIZE) {
+			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], RX_BUFFER_SIZE, s->writeMode | LWS_WRITE_NO_FIN);
 			if (res < 0) {
+				fprintf(stderr, "send res: %d\n", res);
 				free(s->data);
 				s->data = NULL;
 				s->size = 0;
 			} else {
 				s->writeMode = LWS_WRITE_CONTINUATION;
-				s->sent += MAX_SEND_SIZE;
+				s->sent += RX_BUFFER_SIZE;
 				libwebsocket_callback_on_writable(ctx, wsi);
 			}
 		} else {
 			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], s->size - s->sent, s->writeMode);
-			fprintf(stderr, "send res: %d\n", res);
 			free(s->data);
 			s->data = NULL;
 			s->size = 0;

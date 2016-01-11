@@ -27,9 +27,9 @@ enum Protocol {
 	UPLOAD_PROTO = 0, INFO_PROTO = 1, AUDIO_PROTO = 2, VIDEO_PROTO = 3, INTERN_PROTO = 4
 };
 
-static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), 0 }, { "info", callback_info,
-		sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, { "video", callback_video, sizeof(struct toSend), 0 }, {
-		"intern", callback_intern, sizeof(peer), 0 }, { NULL, NULL, 0 } };
+static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), RX_BUFFER_SIZE }, { "info",
+		callback_info, sizeof(struct toSend), RX_BUFFER_SIZE }, { "audio", callback_audio, sizeof(struct toSend), RX_BUFFER_SIZE }, { "video",
+		callback_video, sizeof(struct toSend), RX_BUFFER_SIZE }, { "intern", callback_intern, sizeof(peer), RX_BUFFER_SIZE }, { NULL, NULL, 0 } };
 
 int main(int argc, char *argv[]) {
 	int res, c, nsPort;

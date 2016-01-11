@@ -8,6 +8,7 @@
 #ifndef FILE_UTILITIES_H_
 #define FILE_UTILITIES_H_
 
+#include <libwebsockets.h>
 #include "llist.h"
 
 #define VIDEO_DIR_ENV_VAR "VIDEO_DIR"
@@ -19,7 +20,7 @@
 #define FRAG_SCRIPT "fragcodeMp4.sh"
 #define REMOVE_COMMAND "rm -R "
 
-#define MAX_SEND_SIZE 1024 * 1024
+#define RX_BUFFER_SIZE 10 * 1024
 
 #define MPD_NAME "stream.mpd"
 #define AUDIO_INIT_NAME "ainit.mp4"

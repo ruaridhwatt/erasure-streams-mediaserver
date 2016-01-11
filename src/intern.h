@@ -40,7 +40,7 @@ int getInfo(struct libwebsocket *wsi);
 
 int sendInfo(peer *me, struct libwebsocket *wsi);
 
-peer *fillPeer(peer *p, int *res);
+peer *fillPeer(peer *p, struct libwebsocket *wsi, int *res);
 
 int setInitVars();
 

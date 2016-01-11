@@ -28,8 +28,8 @@ enum AudioCommand getAudioCommand(char *in) {
 	return (enum AudioCommand) i;
 }
 
-int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
-		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
+int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
+		size_t len) {
 	enum AudioCommand c;
 	struct toSend *s;
 	int res;
@@ -65,6 +65,7 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 					if (s->data == NULL) {
 						fprintf(stderr, "No such audio seg: d%s\n", segStr);
 					} else {
+						s->size = strlen((char *) &s->data[LWS_SEND_BUFFER_PRE_PADDING]);
 						s->writeMode = LWS_WRITE_TEXT;
 						fprintf(stderr, "Redirecting to: %s\n", &s->data[LWS_SEND_BUFFER_PRE_PADDING]);
 					}
@@ -84,9 +85,8 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 			break;
 		}
 
-		if (s->size < MAX_SEND_SIZE) {
+		if (s->size < RX_BUFFER_SIZE) {
 			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING], s->size, s->writeMode);
-			fprintf(stderr, "send res: %d\n", res);
 			free(s->data);
 			s->data = NULL;
 			s->size = 0;
@@ -102,23 +102,20 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 		if (s->data == NULL) {
 			break;
 		}
-		if (s->size - s->sent > MAX_SEND_SIZE) {
-			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], MAX_SEND_SIZE,
-					s->writeMode | LWS_WRITE_NO_FIN);
-			fprintf(stderr, "send res: %d\n", res);
+		if (s->size - s->sent > RX_BUFFER_SIZE) {
+			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], RX_BUFFER_SIZE, s->writeMode | LWS_WRITE_NO_FIN);
 			if (res < 0) {
+				fprintf(stderr, "send res: %d\n", res);
 				free(s->data);
 				s->data = NULL;
 				s->size = 0;
 			} else {
 				s->writeMode = LWS_WRITE_CONTINUATION;
-				s->sent += MAX_SEND_SIZE;
+				s->sent += RX_BUFFER_SIZE;
 				libwebsocket_callback_on_writable(ctx, wsi);
 			}
 		} else {
-			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], s->size - s->sent,
-					s->writeMode);
-			fprintf(stderr, "send res: %d\n", res);
+			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], s->size - s->sent, s->writeMode);
 			free(s->data);
 			s->data = NULL;
 			s->size = 0;
