@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "file_utilities.h"
+#include "intern.h"
 #include "audio.h"
 
 const int nrAudioCommands = 2;
@@ -27,13 +28,14 @@ enum AudioCommand getAudioCommand(char *in) {
 	return (enum AudioCommand) i;
 }
 
-int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
-		size_t len) {
+int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
+		enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len) {
 	enum AudioCommand c;
 	struct toSend *s;
 	int res;
 	char *videoName;
-	char *segNr;
+	char *segStr;
+	int segNr;
 
 	switch (reason) {
 	case LWS_CALLBACK_RECEIVE:
@@ -54,12 +56,18 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 		case GET_DATA_SEG:
 			s->writeMode = LWS_WRITE_BINARY;
 			videoName = strtok(NULL, "\t");
-			segNr = strtok(NULL, "\t");
-			fprintf(stderr, "sending audio seg %s\n", segNr);
-			s->data = getEncodedSeg(videoName, segNr, AUDIO, DATA, &s->size);
-			if (s->data == NULL) {
-				fprintf(stderr, "Could not get audio seg!\n");
+			segStr = strtok(NULL, "\t");
+			res = str2int(segStr, &segNr);
+
+			if (res == 0) {
+				s->data = getEncodedSeg(videoName, segStr, AUDIO, DATA, &s->size);
+				if (s->data == NULL) {
+					s->data = (unsigned char *) getRedirect(segNr);
+				} else {
+					fprintf(stderr, "sending audio seg %s\n", segStr);
+				}
 			}
+
 			break;
 		default:
 			fprintf(stderr, "Unknown command received!\n");
@@ -89,7 +97,8 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 			break;
 		}
 		if (s->size - s->sent > MAX_SEND_SIZE) {
-			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], MAX_SEND_SIZE, s->writeMode | LWS_WRITE_NO_FIN);
+			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], MAX_SEND_SIZE,
+					s->writeMode | LWS_WRITE_NO_FIN);
 			fprintf(stderr, "send res: %d\n", res);
 			if (res < 0) {
 				free(s->data);
@@ -101,7 +110,8 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, e
 				libwebsocket_callback_on_writable(ctx, wsi);
 			}
 		} else {
-			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], s->size - s->sent, s->writeMode);
+			res = libwebsocket_write(wsi, &s->data[LWS_SEND_BUFFER_PRE_PADDING + s->sent], s->size - s->sent,
+					s->writeMode);
 			fprintf(stderr, "send res: %d\n", res);
 			free(s->data);
 			s->data = NULL;

@@ -43,7 +43,9 @@
 
 static volatile int force_exit = 0;
 
+int kVal;
 char kStr[K_STR_LEN];
+int mVal;
 char mStr[M_STR_LEN];
 
 enum Track {

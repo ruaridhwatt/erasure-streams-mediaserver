@@ -52,4 +52,6 @@ peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers);
 
 int distribute(char *streamDir);
 
+char *getRedirect(int segNr);
+
 #endif /* SRC_INTERN_H_ */

@@ -234,7 +234,7 @@ int sendMyPort(struct libwebsocket *wsi) {
 
 int setInitVars() {
 	char *idStr, *k, *m;
-	int res, kVal, mVal;
+	int res;
 	idStr = strtok(NULL, "\t");
 	if (idStr == NULL) {
 		return -1;
@@ -383,4 +383,12 @@ int distribute(char *streamDir) {
 		return 0;
 	}
 	return -1;
+}
+
+char *getRedirect(int segNr) {
+	int nrFiles, filesPerServer, index;
+
+	nrFiles = kVal + mVal;
+	filesPerServer = nrFiles / nrPeers;
+	index = (segNr - 1) / filesPerServer;
 }
