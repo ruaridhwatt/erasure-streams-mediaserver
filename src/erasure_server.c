@@ -23,14 +23,17 @@
 #include "intern.h"
 #include "erasure_server.h"
 
-static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), 0 }, {
-		"info", callback_info, sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, {
-		"video", callback_video, sizeof(struct toSend), 0 }, { "intern", callback_intern, sizeof(peer), 0 }, {
-NULL, NULL, 0 } };
+enum Protocol {
+	UPLOAD_PROTO = 0, INFO_PROTO = 1, AUDIO_PROTO = 2, VIDEO_PROTO = 3, INTERN_PROTO = 4
+};
+
+static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload, sizeof(struct upload_user), 0 }, { "info", callback_info,
+		sizeof(struct toSend), 0 }, { "audio", callback_audio, sizeof(struct toSend), 0 }, { "video", callback_video, sizeof(struct toSend), 0 }, {
+		"intern", callback_intern, sizeof(peer), 0 }, { NULL, NULL, 0 } };
 
 int main(int argc, char *argv[]) {
 	int res, c, nsPort;
-	char *nameServer;
+	char *nameServer, *streamToDist;
 	char *envVars[NR_ENV_VARS];
 	struct lws_context_creation_info info;
 	struct libwebsocket_context *context;
@@ -86,11 +89,19 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	snprintf(myPortStr, PORT_STR_LEN, "%d", myPort);
+	snprintf(myPortStr, MAX_PORT_LEN, "%d", myPort);
 
-	res = pthread_mutex_init(&mux, NULL);
+	res = pthread_mutex_init(&fmux, NULL);
 	if (res != 0) {
 		perror("pthread_mutex_init");
+		free(nameServer);
+		exit(1);
+	}
+
+	res = pthread_mutex_init(&lmux, NULL);
+	if (res != 0) {
+		perror("pthread_mutex_init");
+		pthread_mutex_destroy(&fmux);
 		free(nameServer);
 		exit(1);
 	}
@@ -106,26 +117,41 @@ int main(int argc, char *argv[]) {
 	if (context == NULL) {
 		fprintf(stderr, "libwebsocket init failed\n");
 		free(nameServer);
-		pthread_mutex_destroy(&mux);
+		pthread_mutex_destroy(&fmux);
+		pthread_mutex_destroy(&lmux);
 		return EXIT_FAILURE;
 	}
 
-	nameServerWsi = libwebsocket_client_connect(context, nameServer, nsPort, 0, "/",
-			nameServer, "origin", "intern", -1);
+	toDist = llist_empty(free);
+
+	nameServerWsi = libwebsocket_client_connect(context, nameServer, nsPort, 0, "/", nameServer, "origin", "intern", -1);
 	if (nameServerWsi == NULL) {
 		fprintf(stderr, "libwebsocket init failed\n");
+		llist_free(toDist);
 		free(nameServer);
-		pthread_mutex_destroy(&mux);
+		pthread_mutex_destroy(&fmux);
+		pthread_mutex_destroy(&lmux);
 		libwebsocket_context_destroy(context);
 		return EXIT_FAILURE;
 	}
 
 	while (!force_exit) {
 		libwebsocket_service(context, 500);
+		pthread_mutex_lock(&lmux);
+		if (!llist_isEmpty(toDist)) {
+			streamToDist = llist_inspect(llist_first(toDist));
+			res = distribute(streamToDist);
+			if (res == 0) {
+				llist_remove(llist_first(toDist), toDist);
+			}
+		}
+		pthread_mutex_unlock(&lmux);
 	}
 	printf("stopping server...\n");
+	llist_free(toDist);
 	free(nameServer);
-	pthread_mutex_destroy(&mux);
+	pthread_mutex_destroy(&fmux);
+	pthread_mutex_destroy(&lmux);
 	libwebsocket_context_destroy(context);
 	return EXIT_SUCCESS;
 }

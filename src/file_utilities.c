@@ -30,7 +30,7 @@ unsigned char *getVideoList(size_t *size) {
 	}
 
 	*size = strlen(VIDEO_LIST_KW);
-	pthread_mutex_lock(&mux);
+	pthread_mutex_lock(&fmux);
 	while ((entry = readdir(dir)) != NULL) {
 		if (entry->d_name[0] != '.') {
 			*size += 1 + strlen(entry->d_name);
@@ -40,7 +40,7 @@ unsigned char *getVideoList(size_t *size) {
 
 	videoList = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + ((*size + 1) * sizeof(char *)) + LWS_SEND_BUFFER_POST_PADDING);
 	if (videoList == NULL) {
-		pthread_mutex_unlock(&mux);
+		pthread_mutex_unlock(&fmux);
 		closedir(dir);
 		return NULL;
 	}
@@ -57,7 +57,7 @@ unsigned char *getVideoList(size_t *size) {
 		}
 	}
 	*pos = '\0';
-	pthread_mutex_unlock(&mux);
+	pthread_mutex_unlock(&fmux);
 	closedir(dir);
 	return (unsigned char *) videoList;
 }
@@ -214,11 +214,11 @@ FILE *prepUpload(char *filename) {
 		return NULL;
 	}
 
-	pthread_mutex_lock(&mux);
+	pthread_mutex_lock(&fmux);
 	if (access(streamDir, F_OK) == 0 || access(uploadDir, F_OK) == 0) {
 		/* video exists */
 		fprintf(stderr, "Already exists\n");
-		pthread_mutex_unlock(&mux);
+		pthread_mutex_unlock(&fmux);
 		free(uploadDir);
 		free(streamDir);
 		return NULL;
@@ -227,11 +227,11 @@ FILE *prepUpload(char *filename) {
 	free(streamDir);
 
 	if (mkdir(uploadDir, S_IRWXU | S_IRWXG) != 0) {
-		pthread_mutex_unlock(&mux);
+		pthread_mutex_unlock(&fmux);
 		free(uploadDir);
 		return NULL;
 	}
-	pthread_mutex_unlock(&mux);
+	pthread_mutex_unlock(&fmux);
 	filePath = (char *) malloc((strlen(uploadDir) + strlen(filename) + 1) * sizeof(char));
 	if (filePath == NULL) {
 		free(uploadDir);
@@ -304,9 +304,9 @@ int freeIncompleteUpload(char *filename) {
 	strcpy(command, REMOVE_COMMAND);
 	strcat(command, uploadDir);
 	free(uploadDir);
-	pthread_mutex_lock(&mux);
+	pthread_mutex_lock(&fmux);
 	res = system(command);
-	pthread_mutex_unlock(&mux);
+	pthread_mutex_unlock(&fmux);
 	free(command);
 	return res;
 }
@@ -367,20 +367,24 @@ void *__fragmentation_worker(void *in) {
 		if (streamDir == NULL) {
 			res = -1;
 		} else {
-			pthread_mutex_lock(&mux);
+			pthread_mutex_lock(&fmux);
 			fprintf(stderr, "%s -> %s\n", filePath, streamDir);
 			res = rename(filePath, streamDir);
-			pthread_mutex_unlock(&mux);
-			free(streamDir);
+			pthread_mutex_unlock(&fmux);
 		}
 	}
 
 	if (res != 0) {
+		free(streamDir);
 		strcpy(command, REMOVE_COMMAND);
 		strcat(command, filePath);
-		pthread_mutex_lock(&mux);
+		pthread_mutex_lock(&fmux);
 		system(command);
-		pthread_mutex_unlock(&mux);
+		pthread_mutex_unlock(&fmux);
+	} else {
+		pthread_mutex_lock(&lmux);
+		llist_insert(llist_first(toDist), toDist, streamDir);
+		pthread_mutex_unlock(&lmux);
 	}
 	free(command);
 	free(filePath);

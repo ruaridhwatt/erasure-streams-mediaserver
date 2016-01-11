@@ -8,6 +8,8 @@
 #ifndef FILE_UTILITIES_H_
 #define FILE_UTILITIES_H_
 
+#include "llist.h"
+
 #define VIDEO_DIR_ENV_VAR "VIDEO_DIR"
 #define SCRIPT_ENV_VAR "SCRIPT_HOME"
 #define BENTO4_ENV_VAR "BENTO4_HOME"
@@ -59,7 +61,9 @@ struct toSend {
 	int writeMode;
 };
 
-pthread_mutex_t mux;
+pthread_mutex_t fmux;
+pthread_mutex_t lmux;
+llist *toDist;
 
 unsigned char *getVideoList(size_t *size);
 
