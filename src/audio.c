@@ -54,7 +54,6 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 			}
 			break;
 		case GET_DATA_SEG:
-			s->writeMode = LWS_WRITE_BINARY;
 			videoName = strtok(NULL, "\t");
 			segStr = strtok(NULL, "\t");
 			res = str2int(segStr, &segNr);
@@ -63,7 +62,14 @@ int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi,
 				s->data = getEncodedSeg(videoName, segStr, AUDIO, DATA, &s->size);
 				if (s->data == NULL) {
 					s->data = (unsigned char *) getRedirect(segNr);
+					if (s->data == NULL) {
+						fprintf(stderr, "No such audio seg: d%s\n", segStr);
+					} else {
+						s->writeMode = LWS_WRITE_TEXT;
+						fprintf(stderr, "Redirecting to: %s\n", &s->data[LWS_SEND_BUFFER_PRE_PADDING]);
+					}
 				} else {
+					s->writeMode = LWS_WRITE_BINARY;
 					fprintf(stderr, "sending audio seg %s\n", segStr);
 				}
 			}

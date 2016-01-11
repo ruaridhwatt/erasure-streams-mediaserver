@@ -11,6 +11,8 @@
 #include <libwebsockets.h>
 
 #define MY_PORT_FOLLOWS_KW "prt"
+#define SWITCH_SERVER_KW "switch-server"
+#define WS_PROTO_STR "ws://"
 
 #define MAX_PORT_LEN 6
 #define MAX_ID_LEN 6
@@ -53,5 +55,9 @@ peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers);
 int distribute(char *streamDir);
 
 char *getRedirect(int segNr);
+
+peer *getPeer(int segNr, enum SegType type);
+
+void freePeerArr();
 
 #endif /* SRC_INTERN_H_ */

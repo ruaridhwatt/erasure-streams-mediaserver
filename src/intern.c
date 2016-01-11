@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 #include "file_utilities.h"
 #include "intern.h"
 
@@ -147,8 +148,7 @@ int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi, 
 
 	case LWS_CALLBACK_PROTOCOL_DESTROY:
 		fprintf(stderr, "Freeing Peer Array\n");
-		free(*peerArr);
-		free(peerArr);
+		freePeerArr();
 		break;
 	default:
 		break;
@@ -213,12 +213,12 @@ peer *fillPeer(peer *p, int *res) {
 }
 
 int sendMyPort(struct libwebsocket *wsi) {
-	size_t sendLen;
+	size_t strSize;
 	char *buf, *dest;
 	int res;
 
-	sendLen = strlen(MY_PORT_FOLLOWS_KW) + 1 + strlen(myPortStr);
-	buf = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + ((sendLen + 1) * sizeof(char)) + LWS_SEND_BUFFER_POST_PADDING);
+	strSize = strlen(MY_PORT_FOLLOWS_KW) + 1 + strlen(myPortStr) + 1;
+	buf = (char *) malloc(LWS_SEND_BUFFER_PRE_PADDING + (strSize * sizeof(char)) + LWS_SEND_BUFFER_POST_PADDING);
 	if (buf == NULL) {
 		return -1;
 	}
@@ -227,7 +227,7 @@ int sendMyPort(struct libwebsocket *wsi) {
 	dest = strcat(dest, myPortStr);
 	/* PRINT */
 	fprintf(stderr, "%s\n", dest);
-	res = libwebsocket_write(wsi, (unsigned char *) dest, sendLen, LWS_WRITE_TEXT);
+	res = libwebsocket_write(wsi, (unsigned char *) dest, strlen(dest), LWS_WRITE_TEXT);
 	free(buf);
 	return res;
 }
@@ -386,9 +386,55 @@ int distribute(char *streamDir) {
 }
 
 char *getRedirect(int segNr) {
-	int nrFiles, filesPerServer, index;
+	peer *p;
+	char portStr[MAX_PORT_LEN];
+	char *buf, *dest;
+	size_t strSize;
 
-	nrFiles = kVal + mVal;
-	filesPerServer = nrFiles / nrPeers;
-	index = (segNr - 1) / filesPerServer;
+	p = getPeer(segNr, DATA);
+	if (p->wsi == NULL) {
+		return NULL;
+	}
+	sprintf(portStr, "%d", p->port);
+
+	strSize = strlen(SWITCH_SERVER_KW) + 1;
+	strSize += strlen(WS_PROTO_STR);
+	strSize += strlen(p->host) + 1;
+	strSize += strlen(portStr) + 1;
+
+	buf = malloc(LWS_SEND_BUFFER_PRE_PADDING + (strSize * sizeof(char)) + LWS_SEND_BUFFER_POST_PADDING);
+	dest = strcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], SWITCH_SERVER_KW);
+	dest = strcat(dest, "\t");
+	dest = strcat(dest, WS_PROTO_STR);
+	dest = strcat(dest, p->host);
+	dest = strcat(dest, ":");
+	dest = strcat(dest, portStr);
+
+	return buf;
 }
+
+peer *getPeer(int segNr, enum SegType type) {
+	int fileNr, filesPerPeer, index;
+
+	fileNr = (type == DATA) ? (segNr - 1) : (segNr + kVal - 1);
+
+	filesPerPeer = (int) round((kVal + mVal) / ((double) nrPeers));
+
+	index = fileNr / filesPerPeer;
+
+	if (index >= nrPeers) {
+		index = nrPeers - 1;
+	}
+	return peerArr[index];
+}
+
+void freePeerArr() {
+	int i;
+	if (peerArr != NULL) {
+		for (i = 0; i < nrPeers; i++) {
+			free(peerArr[i]);
+		}
+		free(peerArr);
+	}
+}
+

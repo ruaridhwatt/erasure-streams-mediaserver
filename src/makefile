@@ -1,7 +1,7 @@
 OUT=erasure_server
 COMPILER=gcc
 FLAGS=-g -Wall -pedantic
-LIBS=-lwebsockets -lpthread
+LIBS=-lwebsockets -lpthread -lm
 
 BIN_DIR=../bin
 
