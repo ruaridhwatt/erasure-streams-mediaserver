@@ -20,7 +20,7 @@
 #define FRAG_SCRIPT "fragcodeMp4.sh"
 #define REMOVE_COMMAND "rm -R "
 
-#define RX_BUFFER_SIZE 10 * 1024
+#define RX_BUFFER_SIZE 4096
 
 #define MPD_NAME "stream.mpd"
 #define AUDIO_INIT_NAME "ainit.mp4"

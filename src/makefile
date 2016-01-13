@@ -1,4 +1,4 @@
-OUT=erasure_server
+OUT=erasure-streams-mediaserver
 COMPILER=gcc
 FLAGS=-g -Wall -pedantic
 LIBS=-lwebsockets -lpthread -lm
