@@ -1,10 +1,3 @@
-/*
- * video.c
- *
- *  Created on: 17 Dec 2015
- *      Author: dv12rwt
- */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +11,11 @@ enum VideoCommand {
 	GET_INIT = 0, GET_DATA_SEG = 1, UNKNOWN = 2
 };
 
+/**
+ * Converts an video command string to the corresponding VideoCommand enum
+ * @param command The command string
+ * @return The corresponding VideoCommand enum
+ */
 enum VideoCommand getVideoCommand(char *in) {
 	int i;
 	for (i = 0; i < nrVideoCommands; i++) {
@@ -28,6 +26,16 @@ enum VideoCommand getVideoCommand(char *in) {
 	return (enum VideoCommand) i;
 }
 
+/**
+ * Callback for the "video" websockets protocol
+ * @param ctx The context
+ * @param wsi The client connection
+ * @param reason The reason for the callback
+ * @param user The allocated per user data
+ * @param in The data received
+ * @param len The length in bytes of the received data
+ * @return 0 for success, otherwise -1 (sends a close signal to the client)
+ */
 int callback_video(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
 		size_t len) {
 	enum VideoCommand c;

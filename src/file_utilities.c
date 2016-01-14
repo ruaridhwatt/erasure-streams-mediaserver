@@ -1,9 +1,3 @@
-/*
- * file_utilities.c
- *
- *  Created on: 17 Dec 2015
- *      Author: dv12rwt
- */
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -16,6 +10,12 @@
 #include <errno.h>
 #include "file_utilities.h"
 
+/**
+ * Returns a padded (ready to write to libwebsocket) tab separated list of videos avalable to stream. This is the
+ * names of the sub-directories of the VIDEO_DIR environment variable
+ * @param size Where the size of the resulting padded string should be stored
+ * @return The padded tab separated list of video names
+ */
 unsigned char *getVideoList(size_t *size) {
 	char *videoDir;
 	DIR *dir;
@@ -62,6 +62,15 @@ unsigned char *getVideoList(size_t *size) {
 	return (unsigned char *) videoList;
 }
 
+/**
+ * Reads the specified segment to memory.
+ * @param videoName The name of the video
+ * @param segNr The segment number
+ * @param track The track type
+ * @param type the segment type (data or coding)
+ * @param size Where the size of the file should be stored
+ * @return The segment data
+ */
 unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track track, enum SegType type, size_t *size) {
 	char *videoDir;
 	char *filePath;
@@ -144,6 +153,13 @@ unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track track, enu
 	return data;
 }
 
+/**
+ * Reads the specified info file (mpd or init segment) to memory.
+ * @param videoName The video name
+ * @param filename The info file name
+ * @param size Where the size of the file should be stored
+ * @return The info file data
+ */
 unsigned char *getInfoFile(char *videoName, char *filename, size_t *size) {
 	char *videoDir;
 	char *filePath;
@@ -197,6 +213,12 @@ unsigned char *getInfoFile(char *videoName, char *filename, size_t *size) {
 	return data;
 }
 
+/**
+ * Checks that an upload of the specified file may take place. Creates a hidden folder with an open file pointer to
+ * where the upload should be stored.
+ * @param filename The proposed video (file) name
+ * @return A pointer to where the upload should be written or NULL if the upload is not allowed.
+ */
 FILE *prepUpload(char *filename) {
 	char *uploadDir, *streamDir, *pos, *filePath;
 	FILE *f;
@@ -247,6 +269,12 @@ FILE *prepUpload(char *filename) {
 	return f;
 }
 
+/**
+ * Starts a worker thread to fragment and encode the video.
+ *
+ * @param filename The video filename
+ * @return 0 on success otherwise -1
+ */
 int startFragmentation(char *filename) {
 	int res;
 	char *uploadDir, *filePath;
@@ -287,6 +315,11 @@ int startFragmentation(char *filename) {
 	return 0;
 }
 
+/**
+ * Frees all resources associated with an incomplete upload
+ * @param filename The upload filename
+ * @return 0 on success, otherwise -1
+ */
 int freeIncompleteUpload(char *filename) {
 	int res;
 	char *uploadDir, *command;
@@ -311,7 +344,15 @@ int freeIncompleteUpload(char *filename) {
 	return res;
 }
 
-
+/**
+ * Converts a null terminated array of characters to an integer.
+ * @param str The array of characters to be read.
+ * @param i A pointer specifying where the conversion should be stored.
+ * @return True if the conversion was successful, otherwise false.
+ *          A conversion is considered successful iff all the str characters
+ *          were used in the conversion and the result was within the range an
+ *          int can store.
+ */
 int str2int(char *str, int *i) {
 	long l;
 	char *pEnd;
@@ -331,6 +372,10 @@ int str2int(char *str, int *i) {
 	return 0;
 }
 
+/**
+ * Fragments and erasure codes the file at the path specified by in (char *)
+ * @param in The file path (char *)
+ */
 void *__fragmentation_worker(void *in) {
 	int commandLen, res;
 	char *scriptDir, *command, *pos, *streamDir, *filePath;
@@ -391,6 +436,11 @@ void *__fragmentation_worker(void *in) {
 	return NULL;
 }
 
+/**
+ * Converts the hidden upload path to the final stream path
+ * @param uploadPath The upload path
+ * @return The final stream path
+ */
 char *__toStreamPath(char *uploadPath) {
 	int i;
 	char *streamPath, *pos;
@@ -410,6 +460,11 @@ char *__toStreamPath(char *uploadPath) {
 	return streamPath;
 }
 
+/**
+ * Creates the upload path from the specified filename
+ * @param filename
+ * @return The upload path
+ */
 char *__getUploadDirPath(char *filename) {
 	int res;
 	char *videoHome, *subdir, *filepath, *pos;
@@ -445,6 +500,11 @@ char *__getUploadDirPath(char *filename) {
 	return filepath;
 }
 
+/**
+ * Creates the upload directory name from the filename
+ * @param filename
+ * @return The upload directory name
+ */
 char *__getUploadDirName(char *filename) {
 	int i;
 	char *dir, *pos;
@@ -464,6 +524,11 @@ char *__getUploadDirName(char *filename) {
 	return dir;
 }
 
+/**
+ * Checks the filename is valid.
+ * @param filename The filename
+ * @return 0 if valid, otherwise -1
+ */
 int __validateUploadFilename(char *filename) {
 	int res;
 	regex_t regex;

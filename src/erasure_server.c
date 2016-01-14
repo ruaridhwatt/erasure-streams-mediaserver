@@ -1,9 +1,9 @@
 /*
  ============================================================================
  Name        : erasure_server.c
+ A websockets based media server for the Erasure Streams project.
  ============================================================================
  Author      : dv11ann, dv12rwt
- Version     : 0.0
  ============================================================================
  */
 
@@ -31,6 +31,11 @@ static struct libwebsocket_protocols protocols[] = { { "upload", callback_upload
 		callback_info, sizeof(struct toSend), RX_BUFFER_SIZE }, { "audio", callback_audio, sizeof(struct toSend), RX_BUFFER_SIZE }, { "video",
 		callback_video, sizeof(struct toSend), RX_BUFFER_SIZE }, { "intern", callback_intern, sizeof(peer), RX_BUFFER_SIZE }, { NULL, NULL, 0 } };
 
+
+void sighandler(int sig) {
+	force_exit = 1;
+}
+
 int main(int argc, char *argv[]) {
 	int res, c, nsPort;
 	char *nameServer, *streamToDist;
@@ -41,6 +46,7 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGINT, sighandler);
 
+	/* Check that the required environment variables are set */
 	envVars[0] = VIDEO_DIR_ENV_VAR;
 	envVars[1] = BENTO4_ENV_VAR;
 	envVars[2] = CRS_ENV_VAR;
@@ -124,9 +130,10 @@ int main(int argc, char *argv[]) {
 
 	toDist = llist_empty(free);
 
+	/* Connect to the nameserver */
 	nameServerWsi = libwebsocket_client_connect(context, nameServer, nsPort, 0, "/", nameServer, "origin", "intern", -1);
 	if (nameServerWsi == NULL) {
-		fprintf(stderr, "libwebsocket init failed\n");
+		fprintf(stderr, "Could not connect to the nameserver\n");
 		llist_free(toDist);
 		free(nameServer);
 		pthread_mutex_destroy(&fmux);
@@ -156,10 +163,12 @@ int main(int argc, char *argv[]) {
 	return EXIT_SUCCESS;
 }
 
-void sighandler(int sig) {
-	force_exit = 1;
-}
-
+/**
+ * Verifies that the environment variables are set.
+ * @param envVars The array of environment variables
+ * @param nrVars The number of environment variables
+ * @return 0 on success, otherwise -1
+ */
 int verifyEnvironmentSettings(char **envVars, size_t nrVars) {
 	int i, res;
 	char *dest;
@@ -181,6 +190,10 @@ int verifyEnvironmentSettings(char **envVars, size_t nrVars) {
 	return res;
 }
 
+/**
+ * Prints the usage statement to stdout
+ * @param prog The name of the program binary. (argv[0])
+ */
 void print_usage(char *prog) {
 	fprintf(stderr, "%s -s <nameServerURL> -t <nameServerPort> -p <listenPort>\n", prog);
 }

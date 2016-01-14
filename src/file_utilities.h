@@ -68,18 +68,66 @@ pthread_mutex_t fmux;
 pthread_mutex_t lmux;
 llist *toDist;
 
+/**
+ * Returns a padded (ready to write to libwebsocket) tab separated list of videos avalable to stream. This is the
+ * names of the sub-directories of the VIDEO_DIR environment variable
+ * @param size Where the size of the resulting padded string should be stored
+ * @return The padded tab separated list of video names
+ */
 unsigned char *getVideoList(size_t *size);
 
+/**
+ * Reads the specified segment to memory.
+ * @param videoName The name of the video
+ * @param segNr The segment number
+ * @param track The track type
+ * @param type the segment type (data or coding)
+ * @param size Where the size of the file should be stored
+ * @return The segment data
+ */
 unsigned char *getEncodedSeg(char *videoName, char *segNr, enum Track t, enum SegType type, size_t *size);
 
+/**
+ * Reads the specified info file (mpd or init segment) to memory.
+ * @param videoName The video name
+ * @param filename The info file name
+ * @param size Where the size of the file should be stored
+ * @return The info file data
+ */
 unsigned char *getInfoFile(char *videoName, char *filename, size_t *size);
 
+/**
+ * Checks that an upload of the specified file may take place. Creates a hidden folder with an open file pointer to
+ * where the upload should be stored.
+ * @param filename The proposed video (file) name
+ * @return A pointer to where the upload should be written or NULL if the upload is not allowed.
+ */
 FILE *prepUpload(char *filename);
 
+/**
+ * Starts a worker thread to fragment and encode the video.
+ *
+ * @param filename The video filename
+ * @return 0 on success otherwise -1
+ */
 int startFragmentation(char *filename);
 
+/**
+ * Frees all resources associated with an incomplete upload
+ * @param filename The upload filename
+ * @return 0 on success, otherwise -1
+ */
 int freeIncompleteUpload(char *filename);
 
+/**
+ * Converts a null terminated array of characters to an integer.
+ * @param str The array of characters to be read.
+ * @param i A pointer specifying where the conversion should be stored.
+ * @return True if the conversion was successful, otherwise false.
+ *          A conversion is considered successful iff all the str characters
+ *          were used in the conversion and the result was within the range an
+ *          int can store.
+ */
 int str2int(char *str, int *i);
 
 void *__fragmentation_worker(void *filePath);

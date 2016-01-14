@@ -157,6 +157,11 @@ int callback_intern(struct libwebsocket_context *ctx, struct libwebsocket *wsi, 
 	return res;
 }
 
+/**
+ * Writes the get info command to the wsi
+ * @param wsi
+ * @return 0 on success, otherwise -1
+ */
 int getInfo(struct libwebsocket *wsi) {
 	char *buf;
 	int res;
@@ -172,6 +177,12 @@ int getInfo(struct libwebsocket *wsi) {
 	return res;
 }
 
+/**
+ * Writes this peers info to the wsi
+ * @param me This peer
+ * @param wsi The wsi websocket to write to
+ * @return 0 on success, otherwise -1
+ */
 int sendInfo(peer *me, struct libwebsocket *wsi) {
 	char *buf, *dest;
 	char idStr[MAX_ID_LEN];
@@ -199,6 +210,13 @@ int sendInfo(peer *me, struct libwebsocket *wsi) {
 	return res;
 }
 
+/**
+ * Fills the peer struct
+ * @param p The peer to fill
+ * @param wsi The peers wsi
+ * @param res Where to provide the result (0 on success, otherwise -1)
+ * @return The filled peer
+ */
 peer *fillPeer(peer *p, struct libwebsocket *wsi, int *res) {
 	int port;
 
@@ -213,6 +231,11 @@ peer *fillPeer(peer *p, struct libwebsocket *wsi, int *res) {
 	return p;
 }
 
+/**
+ * Writes this peers port to the wsi
+ * @param wsi Th websocket to write to
+ * @return 0 on success, otherwise -1
+ */
 int sendMyPort(struct libwebsocket *wsi) {
 	size_t strSize;
 	char *buf, *dest;
@@ -233,6 +256,10 @@ int sendMyPort(struct libwebsocket *wsi) {
 	return res;
 }
 
+/**
+ * Stores the received initialization variables
+ * @return 0 on success, otherwise -1
+ */
 int setInitVars() {
 	char *idStr, *k, *m;
 	int res;
@@ -270,6 +297,12 @@ int setInitVars() {
 	return 0;
 }
 
+/**
+ * Connects to the peer using the peer string received from the nameserver
+ * @param peerStr The peers info (host:port:id)
+ * @param ctx The websocket context
+ * @return A filled peer struct or NULL if unsuccessful
+ */
 peer *connectToPeer(char *peerStr, struct libwebsocket_context *ctx) {
 	char *peerHost, *peerPortStr, *peerIdStr;
 	int res, peerPort, peerId;
@@ -321,6 +354,16 @@ peer *connectToPeer(char *peerStr, struct libwebsocket_context *ctx) {
 	return p;
 }
 
+/**
+ * Adds a peer to the array of peers
+ * @param p The peer to add
+ * @param peerArr The peer array
+ * @param nrPeers A pointer to the number of peers, this value will be updated
+ * @param peerArrSize A pointer to the current size of the peer array (will be >= nrPeers). May be updated if the peer
+ * array is reallocated
+ * @param res 0 on success, otherwise -1
+ * @return The updated peer array
+ */
 peer **addPeer(peer *p, peer **peerArr, size_t *nrPeers, size_t *peerArrSize, int *res) {
 	int i;
 	peer **reallocedPeerArr;
@@ -350,6 +393,13 @@ peer **addPeer(peer *p, peer **peerArr, size_t *nrPeers, size_t *peerArrSize, in
 	return peerArr;
 }
 
+/**
+ * Removes a peer from the array of peers
+ * @param p The peer to remove
+ * @param peerArr The peer array
+ * @param nrPeers A pointer to the current number of peers (this will be updated on removal)
+ * @return the updated peer array
+ */
 peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers) {
 	int i;
 	for (i = 0; i < *nrPeers; i++) {
@@ -377,6 +427,11 @@ peer **removePeer(peer *p, peer **peerArr, size_t *nrPeers) {
 	return peerArr;
 }
 
+/**
+ * TODO Update the peers with a queue of files to be sent and request a writable callback.
+ * @param streamDir The stream directory
+ * @return 0 on success, otherwise -1
+ */
 int distribute(char *streamDir) {
 	if (m == NORM) {
 		m = DIST;
@@ -386,6 +441,11 @@ int distribute(char *streamDir) {
 	return -1;
 }
 
+/**
+ * Creates a redirect string to be sent to a client given the segment number. (switch-server\tws://host:port)
+ * @param segNr
+ * @return The redirect command
+ */
 char *getRedirect(int segNr) {
 	peer *p;
 	char portStr[MAX_PORT_LEN];
@@ -415,6 +475,12 @@ char *getRedirect(int segNr) {
 	return buf;
 }
 
+/**
+ * Gets the peer that should have the given segment type/number
+ * @param segNr The segment number
+ * @param type The segment type
+ * @return The peer that should hold the data
+ */
 peer *getPeer(int segNr, enum SegType type) {
 	int fileNr, filesPerPeer, index;
 
@@ -432,6 +498,9 @@ peer *getPeer(int segNr, enum SegType type) {
 	return peerArr[index];
 }
 
+/**
+ * frees the peer array
+ */
 void freePeerArr() {
 	int i;
 	if (peerArr != NULL) {

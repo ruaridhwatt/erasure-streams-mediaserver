@@ -1,10 +1,3 @@
-/*
- * audio.c
- *
- *  Created on: Dec 17, 2015
- *      Author: dv12rwt
- */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +11,11 @@ enum AudioCommand {
 	GET_INIT = 0, GET_DATA_SEG = 1, UNKNOWN = 2
 };
 
+/**
+ * Converts an audio command string to the corresponding AudioCommand enum
+ * @param command The command string
+ * @return The corresponding AudioCommand enum
+ */
 enum AudioCommand getAudioCommand(char *in) {
 	int i;
 	for (i = 0; i < nrAudioCommands; i++) {
@@ -28,6 +26,16 @@ enum AudioCommand getAudioCommand(char *in) {
 	return (enum AudioCommand) i;
 }
 
+/**
+ * Callback for the "audio" websockets protocol
+ * @param ctx The context
+ * @param wsi The client connection
+ * @param reason The reason for the callback
+ * @param user The allocated per user data
+ * @param in The data received
+ * @param len The length in bytes of the received data
+ * @return 0 for success, otherwise -1 (sends a close signal to the client)
+ */
 int callback_audio(struct libwebsocket_context *ctx, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in,
 		size_t len) {
 	enum AudioCommand c;
