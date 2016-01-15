@@ -416,11 +416,13 @@ void *__fragmentation_worker(void *in) {
 			fprintf(stderr, "%s -> %s\n", filePath, streamDir);
 			res = rename(filePath, streamDir);
 			pthread_mutex_unlock(&fmux);
+			if (res != 0) {
+				free(streamDir);
+			}
 		}
 	}
 
 	if (res != 0) {
-		free(streamDir);
 		strcpy(command, REMOVE_COMMAND);
 		strcat(command, filePath);
 		pthread_mutex_lock(&fmux);

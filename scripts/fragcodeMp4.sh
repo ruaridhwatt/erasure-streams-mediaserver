@@ -45,7 +45,7 @@ if ! rm 'frag.mp4'; then
 	exit 1
 fi 
 
-crs_audstring=$CRS_HOME"bin/crs_erasure_codes -e -k"$2" -m"$3" adata aenc"
+crs_audstring=$CRS_HOME"bin/crs-erasure-codes -e -k"$2" -m"$3" adata aenc"
 if ! $crs_audstring; then
 	exit 1
 fi
@@ -54,7 +54,7 @@ if ! rm 'adata'; then
 	exit 1
 fi 
 
-crs_vidstring=$CRS_HOME"bin/crs_erasure_codes -e -k"$2" -m"$3" vdata venc"
+crs_vidstring=$CRS_HOME"bin/crs-erasure-codes -e -k"$2" -m"$3" vdata venc"
 if ! $crs_vidstring; then
 	exit 1
 fi
